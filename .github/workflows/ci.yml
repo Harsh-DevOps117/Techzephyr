@@ -26,3 +26,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build the API image
         run: docker build -t techzephyr-api:ci .
+      - name: Check the nginx config
+        run: docker run --rm -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" nginx:1.27-alpine nginx -t
