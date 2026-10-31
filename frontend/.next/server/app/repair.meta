@@ -1,0 +1,34 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/repair/layout,_N_T_/repair/page,_N_T_/repair"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/repair/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 64,
+    "slots": {
+      "children": {
+        "hints": 96,
+        "slots": {
+          "children": {
+            "hints": 160,
+            "slots": null
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/576753751ca4e060d1938c45eb800d75901e8689b33d66eb303afc80acd4f016/$/repair",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/repair/page"
+    },
+    "isFallback": false
+  }
+}

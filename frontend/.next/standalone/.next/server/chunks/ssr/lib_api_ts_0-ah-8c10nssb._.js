@@ -1,0 +1,3 @@
+module.exports=[53250,a=>{"use strict";async function b(a,c={}){let d;try{d=await fetch(`/backend${a}`,{...c,headers:{"content-type":"application/json",...c.headers}})}catch{return{error:"Cannot reach the API. Check that the backend is running and CORS allows this frontend."}}let e=await d.json().catch(()=>({}));return d.ok?{data:e}:{error:e.message??"Request failed"}}a.s(["k",0,b,"t",0,function(){let a=Date.now().toString(16).padStart(12,"0"),b=Array.from({length:19},()=>Math.floor(16*Math.random()).toString(16)).join("");return`${a.slice(0,8)}-${a.slice(8)}-7${b.slice(0,3)}-${["8","9","a","b"][Math.floor(4*Math.random())]}${b.slice(3,6)}-${b.slice(6,18)}`}])}];
+
+//# sourceMappingURL=lib_api_ts_0-ah-8c10nssb._.js.map

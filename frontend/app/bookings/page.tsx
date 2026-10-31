@@ -1,0 +1,1 @@
+"use client";import {ApiAction}from"../../components/smart/api-action";export default function Bookings(){return <ApiAction title="Queue Spectra booking decisions" path="/api/v1/bookings/decide" fields={["scheduleVersionId"]} initial={'{\n  "scheduleVersionId": ""\n}'}/>}

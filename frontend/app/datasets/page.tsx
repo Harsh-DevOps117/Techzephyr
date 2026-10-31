@@ -1,0 +1,1 @@
+"use client";import { ApiAction } from "../../components/smart/api-action";export default function Datasets(){return <ApiAction title="Import dataset" path="/api/v1/datasets/import" fields={["sourceName","dataset"]} initial={'{\n  "sourceName": "cit_public.json",\n  "dataset": {}\n}'}/>}

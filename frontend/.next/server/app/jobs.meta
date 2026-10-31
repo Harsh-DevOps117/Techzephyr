@@ -1,0 +1,34 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/jobs/layout,_N_T_/jobs/page,_N_T_/jobs"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/jobs/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 64,
+    "slots": {
+      "children": {
+        "hints": 96,
+        "slots": {
+          "children": {
+            "hints": 160,
+            "slots": null
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/29011ee509e8b1415b189643830626e2cee54f1b987244a2a75d2a6e1a380b3e/$/jobs",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/jobs/page"
+    },
+    "isFallback": false
+  }
+}

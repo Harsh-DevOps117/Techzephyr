@@ -1,0 +1,1 @@
+export default function Approvals(){return <main className="route"><p className="eyebrow">ADMIN REVIEW</p><h1>Approvals</h1><p>Validated timetable repairs and class-displacing bookings appear here. An Admin cannot approve their own proposal.</p><div className="empty">No pending approvals yet.</div></main>}

@@ -1,0 +1,8 @@
+{
+  "name": "techzephyr4-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": { "dev": "next dev -p 3001", "build": "next build", "start": "next start -p 3001", "check": "tsc --noEmit" },
+  "dependencies": { "next": "latest", "react": "latest", "react-dom": "latest" },
+  "devDependencies": { "@types/node": "latest", "@types/react": "latest", "@types/react-dom": "latest", "typescript": "latest" }
+}

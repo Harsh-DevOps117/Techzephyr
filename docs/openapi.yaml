@@ -1,0 +1,184 @@
+openapi: 3.1.0
+info:
+  title: TechZephyr 4 API
+  version: 0.1.0
+  description: CIT scheduling API. All writes require a UUIDv7 Idempotency-Key and an authenticated actor header.
+servers:
+  - url: http://localhost:3000
+security:
+  - BearerAuth: []
+tags:
+  - name: Auth
+  - name: Datasets
+  - name: Schedules
+  - name: Bookings
+  - name: AI
+  - name: Jobs
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Sign in and obtain an access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: admin@cit.local }
+                password: { type: string, format: password, example: TechZephyr!2026 }
+      responses:
+        '200':
+          description: Access and refresh tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: integer, example: 900 }
+                  role: { type: string, example: admin }
+        '401': { description: Invalid credentials }
+  /health:
+    get:
+      security: []
+      summary: Service and database health check
+      responses:
+        '200': { description: Healthy }
+  /api/v1/datasets/import:
+    post:
+      tags: [Datasets]
+      summary: Import an immutable CIT dataset version
+      parameters: [ { $ref: '#/components/parameters/ActorId' }, { $ref: '#/components/parameters/ActorRole' }, { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dataset, sourceName]
+              properties:
+                sourceName: { type: string }
+                dataset: { type: object, additionalProperties: true }
+      responses:
+        '201': { description: Imported dataset version }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /api/v1/schedules/generate:
+    post:
+      tags: [Schedules]
+      summary: Queue initial timetable generation
+      parameters: [ { $ref: '#/components/parameters/ActorId' }, { $ref: '#/components/parameters/ActorRole' }, { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [datasetVersionId], properties: { datasetVersionId: { type: string, format: uuid } } }
+      responses: { '202': { description: Generation job queued } }
+  /api/v1/schedules/repair:
+    post:
+      tags: [Schedules]
+      summary: Queue a minimum-change schedule repair
+      parameters: [ { $ref: '#/components/parameters/ActorId' }, { $ref: '#/components/parameters/ActorRole' }, { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [baselineScheduleId, datasetVersionId, disruption]
+              properties:
+                baselineScheduleId: { type: string, format: uuid }
+                datasetVersionId: { type: string, format: uuid }
+                disruption: { type: object, required: [changes] }
+      responses: { '202': { description: Repair job queued } }
+  /api/v1/bookings/decide:
+    post:
+      tags: [Bookings]
+      summary: Queue priority-aware Spectra booking decisions
+      parameters: [ { $ref: '#/components/parameters/ActorId' }, { $ref: '#/components/parameters/ActorRole' }, { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [scheduleVersionId], properties: { scheduleVersionId: { type: string, format: uuid } } }
+      responses: { '202': { description: Booking job queued } }
+  /api/v1/schedules/{id}/approve:
+    post:
+      tags: [Schedules]
+      summary: Approve a validated schedule proposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ActorId'
+        - $ref: '#/components/parameters/ActorRole'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { description: Approved }
+        '403': { description: Self approval is forbidden }
+        '409': { description: Proposal is not validated }
+  /api/v1/ai/booking-drafts:
+    post:
+      tags: [AI]
+      summary: Turn an English or Hinglish request into an editable booking draft
+      description: The AI output is schema-validated but is not a booking decision. Submit its edited result through the normal booking workflow.
+      parameters: [ { $ref: '#/components/parameters/ActorId' }, { $ref: '#/components/parameters/ActorRole' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, minLength: 3, maxLength: 4000 }
+      responses:
+        '200':
+          description: Schema-validated draft. It must still be checked by deterministic booking validation before submission.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [draft, validation, requestId]
+        '503': { description: AI provider is unavailable; use the manual form. }
+  /api/v1/jobs/{id}:
+    get:
+      tags: [Jobs]
+      summary: Read asynchronous job status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ActorId'
+        - $ref: '#/components/parameters/ActorRole'
+      responses: { '200': { description: Job details } }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Call `/api/v1/auth/login`, copy `accessToken`, then click Authorize and paste it here.
+    UserId:
+      type: apiKey
+      in: header
+      name: x-user-id
+      description: Use local demo Admin ID `018f9f69-f6f2-7b01-8a2b-531e5d44e018`.
+    UserRole:
+      type: apiKey
+      in: header
+      name: x-user-role
+      description: Use `admin` for the local Admin demo user.
+  parameters:
+    ActorId: { name: x-user-id, in: header, required: true, schema: { type: string, format: uuid }, example: 018f9f69-f6f2-7b01-8a2b-531e5d44e018, description: Development authentication actor ID }
+    ActorRole: { name: x-user-role, in: header, required: true, schema: { type: string, enum: [admin, department_coordinator, faculty, club] }, example: admin }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid }, description: A UUIDv7 generated once per user intent }
+  responses:
+    IdempotencyConflict:
+      description: The idempotency key has already been used with a different request body.

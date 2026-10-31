@@ -1,0 +1,13 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/approvals/page": "/approvals",
+  "/approve/page": "/approve",
+  "/bookings/page": "/bookings",
+  "/datasets/page": "/datasets",
+  "/jobs/page": "/jobs",
+  "/login/page": "/login",
+  "/page": "/",
+  "/repair/page": "/repair",
+  "/schedule/page": "/schedule"
+}

@@ -1,0 +1,34 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/approvals/layout,_N_T_/approvals/page,_N_T_/approvals"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/approvals/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 64,
+    "slots": {
+      "children": {
+        "hints": 96,
+        "slots": {
+          "children": {
+            "hints": 160,
+            "slots": null
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/a3844b493a2d44a5b474a935ce209e0b0142be082284c352f83f4b99b2e3ad0d/$/approvals",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/approvals/page"
+    },
+    "isFallback": false
+  }
+}

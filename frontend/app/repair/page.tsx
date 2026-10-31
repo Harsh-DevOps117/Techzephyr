@@ -1,0 +1,1 @@
+"use client";import { ApiAction } from "../../components/smart/api-action";export default function Repair(){return <ApiAction title="Repair a disrupted timetable" path="/api/v1/schedules/repair" fields={["baselineScheduleId","datasetVersionId","disruption.changes"]} initial={'{\n  "baselineScheduleId": "",\n  "datasetVersionId": "",\n  "disruption": { "changes": [] }\n}'}/>}

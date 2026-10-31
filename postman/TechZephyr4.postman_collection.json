@@ -1,0 +1,141 @@
+{
+  "info": {
+    "_postman_id": "f12f7376-7a12-4c7f-9a62-4a7f136baf01",
+    "name": "TechZephyr 4 API",
+    "description": "Backend API for the CIT scheduling platform. Every state-changing request creates a UUIDv7 idempotency key in its pre-request script.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "userId", "value": "018f9f69-f6f2-7b01-8a2b-531e5d44e018" },
+    { "key": "userRole", "value": "admin" },
+    { "key": "datasetVersionId", "value": "" },
+    { "key": "scheduleVersionId", "value": "" },
+    { "key": "jobId", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "function randomHex(length) {",
+          "  let output = '';",
+          "  while (output.length < length) output += Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, '0');",
+          "  return output.slice(0, length);",
+          "}",
+          "function uuidv7() {",
+          "  const timestamp = Date.now().toString(16).padStart(12, '0');",
+          "  const versionAndRandom = '7' + randomHex(3);",
+          "  const variant = '89ab'[Math.floor(Math.random() * 4)] + randomHex(3);",
+          "  return `${timestamp.slice(0, 8)}-${timestamp.slice(8)}-${versionAndRandom}-${variant}-${randomHex(12)}`;",
+          "}",
+          "pm.variables.set('idempotencyKey', uuidv7());"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+    },
+    {
+      "name": "Parse AI booking draft",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" },
+          { "key": "x-user-role", "value": "{{userRole}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{ \"text\": \"seminar hall kal shaam 6 baje, 2 ghante, 100 log, mic chahiye\" }" },
+        "url": "{{baseUrl}}/api/v1/ai/booking-drafts"
+      }
+    },
+    {
+      "name": "Import CIT public dataset",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" },
+          { "key": "x-user-role", "value": "{{userRole}}" },
+          { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sourceName\": \"cit_public.json\",\n  \"dataset\": {{citDataset}}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/datasets/import"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) pm.collectionVariables.set('datasetVersionId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Generate timetable",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" },
+          { "key": "x-user-role", "value": "{{userRole}}" },
+          { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"datasetVersionId\": \"{{datasetVersionId}}\" }"
+        },
+        "url": "{{baseUrl}}/api/v1/schedules/generate"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 202) { const body = pm.response.json(); pm.collectionVariables.set('scheduleVersionId', body.scheduleVersionId); pm.collectionVariables.set('jobId', body.jobId); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get job status",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" },
+          { "key": "x-user-role", "value": "{{userRole}}" }
+        ],
+        "url": "{{baseUrl}}/api/v1/jobs/{{jobId}}"
+      }
+    },
+    {
+      "name": "Queue booking decisions",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" },
+          { "key": "x-user-role", "value": "{{userRole}}" },
+          { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"scheduleVersionId\": \"{{scheduleVersionId}}\" }"
+        },
+        "url": "{{baseUrl}}/api/v1/bookings/decide"
+      }
+    }
+  ]
+}
