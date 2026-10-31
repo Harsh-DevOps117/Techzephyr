@@ -115,9 +115,23 @@ jobs:
           add_user admin
           cat > /tmp/remote-deploy.sh <<'REMOTE'
           set -euo pipefail
-          if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git ca-certificates curl
+          install_pkgs() {
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y "$@"
+            elif command -v dnf >/dev/null 2>&1; then
+              sudo dnf install -y "$@"
+            elif command -v yum >/dev/null 2>&1; then
+              sudo yum install -y "$@"
+            elif command -v apk >/dev/null 2>&1; then
+              sudo apk add --no-cache "$@"
+            else
+              echo "No supported package manager. Install git, curl, and python3, then rerun."
+              exit 1
+            fi
+          }
+          if ! command -v git >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
+            install_pkgs git ca-certificates curl python3
           fi
           if ! command -v docker >/dev/null 2>&1; then
             curl -fsSL https://get.docker.com | sudo sh
