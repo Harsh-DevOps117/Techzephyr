@@ -130,8 +130,12 @@ jobs:
               exit 1
             fi
           }
-          if ! command -v git >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
-            install_pkgs git ca-certificates curl python3
+          missing=()
+          command -v git >/dev/null 2>&1 || missing+=(git)
+          command -v curl >/dev/null 2>&1 || missing+=(curl)
+          command -v python3 >/dev/null 2>&1 || missing+=(python3)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            install_pkgs "${missing[@]}"
           fi
           if ! command -v docker >/dev/null 2>&1; then
             curl -fsSL https://get.docker.com | sudo sh
