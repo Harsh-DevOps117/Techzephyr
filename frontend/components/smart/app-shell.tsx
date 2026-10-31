@@ -10,12 +10,12 @@ import { VoiceAssistant } from "./voice-assistant";
 
 const links = [
   { href: "/dashboard", label: "Workspace", icon: GridIcon },
-  { href: "/datasets", label: "1 · Data", icon: DatabaseIcon },
-  { href: "/schedule", label: "2 · Timetable", icon: CalendarIcon },
-  { href: "/approvals", label: "3 · Approvals", icon: CheckIcon },
-  { href: "/bookings", label: "4 · Venues", icon: SparkIcon },
+  { href: "/datasets", label: "Data", icon: DatabaseIcon },
+  { href: "/schedule", label: "Timetable", icon: CalendarIcon },
+  { href: "/approvals", label: "Approvals", icon: CheckIcon },
+  { href: "/bookings", label: "Venues", icon: SparkIcon },
   { href: "/repair", label: "Changes", icon: WrenchIcon },
-  { href: "/manual", label: "Manual events", icon: CalendarIcon },
+  { href: "/manual", label: "Events", icon: CalendarIcon },
   { href: "/jobs", label: "Jobs", icon: BriefcaseIcon },
 ];
 
@@ -56,8 +56,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-layout">
       <aside className={`sidebar ${open ? "open" : ""}`}>
-        <Link className="brand" href="/dashboard" onClick={() => setOpen(false)}><span className="mark">C</span><span><b>CIT</b><small>Campus week</small></span></Link>
-        <p className="side-kicker">Follow the numbers</p>
+        <Link className="brand" href="/dashboard" onClick={() => setOpen(false)}><span className="mark">C</span><span><b>TechZephyr</b><small>CIT scheduling</small></span></Link>
+        <p className="side-kicker">Campus</p>
         <nav aria-label="Primary navigation">{links.map(({ href, label, icon: NavIcon }) => <Link className={path === href ? "active" : ""} href={href} key={href} onClick={() => setOpen(false)}><NavIcon /><span>{label}</span></Link>)}</nav>
         <div className="sidebar-foot">
           <Link href="/profile" onClick={() => setOpen(false)} className="who">
