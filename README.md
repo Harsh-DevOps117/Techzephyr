@@ -229,7 +229,7 @@ Copy `.env.example` to `.env` before starting. Every variable is listed there. L
 1. `cp .env.example .env` and, only if you want AI drafts, set `GROQ_API_KEY` in that file.
 2. `docker compose up -d --build`
 3. `docker compose ps`, then `curl http://localhost:3000/health`
-4. Open the app at `http://localhost:3001` and sign in with a demo account. The API is on port `3000`. Swagger UI is at `http://localhost:8080`.
+4. Open the app through nginx at `http://localhost`. The same stack still exposes the web app on `http://localhost:3001`, the API on `http://localhost:3000`, and Swagger UI on `http://localhost:8080`. Nginx also serves the API at `http://localhost/api/` and the docs at `http://localhost/docs/`.
 
 Compose starts PostgreSQL, RabbitMQ, Redis, the API (including migrations), the worker and the PWA. No host `DATABASE_URL` is required for that path; Compose injects its own local credentials.
 
@@ -305,7 +305,8 @@ Regenerate them with `npm run exports:generate`; both commands are also checked 
 - Header auth (`x-user-id`) is off when `NODE_ENV=production`. Sign in with email and password. Access tokens refresh through `/api/v1/auth/refresh` and logout revokes the refresh token.
 - Logs are JSON via Winston in production (`LOG_LEVEL`). They include request id, status, and duration, and they do not include passwords or tokens.
 - The workspace has a bottom-right voice button. It drafts a booking or a schedule change and speaks the result. `llm-guardrails` blocks injection, secrets, and any request to approve or skip the validator.
-- GitHub Actions (`.github/workflows/ci.yml`) typechecks the API and the web app, then builds the API image.
+- GitHub Actions (`.github/workflows/ci.yml`) typechecks the API and the web app, checks `nginx/nginx.conf`, and builds the API image.
+- Compose starts nginx on port `80` (`NGINX_PORT`). It forwards `/` to the web app, `/api/`, `/health`, `/openapi.yaml`, and `/backend/` to the API, and `/docs/` to Swagger UI. Terminate TLS at nginx when this is deployed on a public host.
 
 ## Known limitations
 

@@ -192,6 +192,7 @@ const bookingSubmissionSchema = z.object({
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
+  app.set("trust proxy", 1);
   const allowedOrigins = new Set(config.ALLOWED_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean));
   app.use(
     cors({
