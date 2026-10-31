@@ -16,35 +16,66 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KEY: ${{ secrets.SSH_KEY }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          KEY: ${{ secrets.KEY }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           HOST_IP: ${{ secrets.HOST_IP }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
           IP: ${{ secrets.IP }}
           HOST: ${{ secrets.HOST }}
+          HOSTIP: ${{ secrets.HOSTIP }}
+          IP_ADDRESS: ${{ secrets.IP_ADDRESS }}
+          PUBLIC_IP: ${{ secrets.PUBLIC_IP }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_IP: ${{ secrets.EC2_IP }}
+          EC2_PUBLIC_IP: ${{ secrets.EC2_PUBLIC_IP }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_IP: ${{ secrets.DEPLOY_IP }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          REMOTE_IP: ${{ secrets.REMOTE_IP }}
+          VPS_IP: ${{ secrets.VPS_IP }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
           HOST_NAME: ${{ secrets.HOST_NAME }}
           NAME: ${{ secrets.NAME }}
           SSH_USER: ${{ secrets.SSH_USER }}
           USERNAME: ${{ secrets.USERNAME }}
+          USER_NAME: ${{ secrets.USER_NAME }}
+          SERVER_NAME: ${{ secrets.SERVER_NAME }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          HOSTNAME: ${{ secrets.HOSTNAME }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          HOST_USER: ${{ secrets.HOST_USER }}
+          LOGIN_USER: ${{ secrets.LOGIN_USER }}
         run: |
           set -euo pipefail
-          key="${PEM:-${SSH_PRIVATE_KEY:-${SSH_KEY:-${PRIVATE_KEY:-}}}}"
-          ip="${HOST_IP:-${SERVER_IP:-${IP:-${HOST:-}}}}"
-          name="${HOST_NAME:-${NAME:-${SSH_USER:-${USERNAME:-}}}}"
-          if [ -z "$key" ]; then
-            echo "No private key secret is set. Add PEM (or SSH_PRIVATE_KEY)."
-            exit 1
-          fi
-          if [ -z "$ip" ]; then
-            echo "No host IP secret is set. Add HOST_IP (or SERVER_IP)."
-            exit 1
-          fi
-          if [ -z "$name" ]; then
-            echo "No name secret is set. Add HOST_NAME as the SSH user, for example ubuntu."
-            exit 1
-          fi
-          user="$name"
-          if [[ "$name" == *.* ]]; then
-            user="${SSH_USER:-${USERNAME:-ubuntu}}"
-            echo "HOST_NAME looks like a hostname. SSH user is ${user}."
+          pick() {
+            local value="" chosen="" var
+            for var in "$@"; do
+              if [ -n "${!var:-}" ]; then
+                echo "secret ${var} is set" >&2
+                if [ -z "$value" ]; then
+                  value="${!var}"
+                  chosen="$var"
+                fi
+              fi
+            done
+            if [ -z "$value" ]; then
+              echo "none of these secrets are set: $*" >&2
+              return 1
+            fi
+            echo "selected ${chosen}" >&2
+            printf '%s' "$value"
+          }
+          key="$(pick PEM SSH_PRIVATE_KEY SSH_KEY PRIVATE_KEY KEY DEPLOY_KEY)"
+          ip="$(pick HOST_IP SERVER_IP IP HOST HOSTIP IP_ADDRESS PUBLIC_IP SERVER_HOST SSH_HOST EC2_HOST EC2_IP EC2_PUBLIC_IP DEPLOY_HOST DEPLOY_IP REMOTE_HOST REMOTE_IP VPS_IP VPS_HOST)"
+          name="$(pick HOST_NAME NAME SSH_USER USERNAME USER_NAME SERVER_NAME SERVER_USER HOSTNAME EC2_USER SSH_USERNAME DEPLOY_USER HOST_USER LOGIN_USER || true)"
+          user="${name:-ubuntu}"
+          if [[ "$user" == *.* ]]; then
+            user="${SSH_USER:-${EC2_USER:-${DEPLOY_USER:-ubuntu}}}"
+            echo "Name looks like a hostname. SSH user is ${user}."
           else
             echo "SSH user is ${user}."
           fi
