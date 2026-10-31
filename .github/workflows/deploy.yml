@@ -3,7 +3,7 @@ name: Deploy
 on:
   workflow_dispatch:
   push:
-    branches: [main, cursor/amazon-linux-deploy-2111]
+    branches: [main, cursor/amazon-linux-deploy-2111, cursor/deploy-health-wait-2111]
 
 jobs:
   deploy:
@@ -116,8 +116,25 @@ jobs:
           sudo docker compose build
           sudo docker compose up -d
           sudo docker compose ps
-          curl -fsS http://127.0.0.1/healthz
-          echo
-          curl -fsS http://127.0.0.1/health
-          echo
+          # /healthz is nginx itself. /health is the API, which is often still starting
+          # when nginx is already answering, so a single curl -f exits 22 on HTTP 502.
+          wait_url() {
+            url="$1"
+            attempt=1
+            while [ "$attempt" -le 18 ]; do
+              if curl -fsS "$url"; then
+                echo
+                return 0
+              fi
+              echo "waiting for ${url} (${attempt}/18)"
+              attempt=$((attempt + 1))
+              sleep 5
+            done
+            echo
+            sudo docker compose ps || true
+            sudo docker compose logs api --tail 80 || true
+            return 1
+          }
+          wait_url http://127.0.0.1/healthz
+          wait_url http://127.0.0.1/health
           REMOTE
