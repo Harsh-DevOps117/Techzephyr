@@ -307,7 +307,7 @@ Regenerate them with `npm run exports:generate`; both commands are also checked 
 - The workspace has a bottom-right voice button. It drafts a booking or a schedule change and speaks the result. `llm-guardrails` blocks injection, secrets, and any request to approve or skip the validator.
 - GitHub Actions (`.github/workflows/ci.yml`) typechecks the API and the web app, checks `nginx/nginx.conf`, and builds the API image.
 - Compose starts nginx on port `80` (`NGINX_PORT`). It forwards `/` to the web app, `/api/`, `/health`, `/openapi.yaml`, and `/backend/` to the API, and `/docs/` to Swagger UI. Terminate TLS at nginx when this is deployed on a public host.
-- Deploy (`.github/workflows/deploy.yml`) runs on every push to `main` and from the Actions tab. Repository secrets: `PEM` (private key), `HOST_IP`, and `HOST_NAME` (SSH user, such as `ubuntu`). `SSH_PRIVATE_KEY`, `SERVER_IP`, and `SSH_USER` are accepted under those names as well. The first deploy writes `/opt/techzephyr/.env` with a generated `JWT_SECRET` and does not print it.
+- Deploy (`.github/workflows/deploy.yml`) targets Amazon Linux. It uses `dnf` and the Amazon Linux Docker package, then Compose. Repository secrets: `SSH_PRIVATE_KEY`, `HOST_IP`, and `SSH_USERNAME` (or `HOST_NAME` / `ec2-user`). The first deploy writes `/opt/techzephyr/.env` with a generated `JWT_SECRET` and does not print it.
 
 ## Known limitations
 
