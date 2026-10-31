@@ -1,0 +1,133 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { api } from "../../lib/api";
+
+type Dash = {
+  datasetVersionId: string | null;
+  pendingApprovals: number;
+  activeJobs: number;
+  latestSchedule: { status: string } | null;
+};
+
+type Hint = { title: string; copy: string; href: string; label: string };
+
+const pageHints: Record<string, Hint> = {
+  "/datasets": {
+    title: "Choose cit_public.json, then press Import dataset.",
+    copy: "When a dataset card appears, the next click is Timetable.",
+    href: "/schedule",
+    label: "Next: Timetable",
+  },
+  "/schedule": {
+    title: "Click the dataset card, then Generate timetable.",
+    copy: "You do not paste an id. After it starts, watch the job card.",
+    href: "/jobs",
+    label: "Next: Operations",
+  },
+  "/jobs": {
+    title: "Click the newest job card.",
+    copy: "Succeeded means a different admin can approve the week.",
+    href: "/approvals",
+    label: "Next: Approvals",
+  },
+  "/approvals": {
+    title: "Open the proposal, then approve it.",
+    copy: "If you generated the week, sign out and use reviewer@cit.local.",
+    href: "/approve",
+    label: "Next: Confirm",
+  },
+  "/approve": {
+    title: "Click the proposal card, tick the box, then Approve.",
+    copy: "After that, the week can be viewed and booked against.",
+    href: "/schedule",
+    label: "Next: Timetable",
+  },
+  "/bookings": {
+    title: "Click the approved timetable card.",
+    copy: "Then press Re-evaluate Spectra requests. Every decision includes a reason.",
+    href: "/jobs",
+    label: "Next: Operations",
+  },
+  "/repair": {
+    title: "Click the approved week, then add the change.",
+    copy: "Propose repair. It stays a proposal until another admin approves it.",
+    href: "/approvals",
+    label: "Next: Approvals",
+  },
+  "/manual": {
+    title: "Click the approved week, then a room card.",
+    copy: "Add a title and press Validate and schedule.",
+    href: "/bookings",
+    label: "Next: Venue requests",
+  },
+  "/profile": {
+    title: "This is your campus identity.",
+    copy: "Your role decides which of the four steps you are allowed to press.",
+    href: "/dashboard",
+    label: "Back to workspace",
+  },
+};
+
+function fromState(dash: Dash | null): Hint {
+  if (!dash?.datasetVersionId) {
+    return {
+      title: "Start by importing the CIT dataset.",
+      copy: "Open Data manager and choose cit_public.json. No id to type.",
+      href: "/datasets",
+      label: "Next: Data manager",
+    };
+  }
+  const status = dash.latestSchedule?.status;
+  if (!status || status === "failed") {
+    return {
+      title: "Generate the weekly timetable.",
+      copy: "On Timetable, click the dataset card, then Generate.",
+      href: "/schedule",
+      label: "Next: Timetable",
+    };
+  }
+  if (status === "generating" || dash.activeJobs > 0) {
+    return {
+      title: "A job is still running.",
+      copy: "Open Operations and click the job card. Wait until it says succeeded.",
+      href: "/jobs",
+      label: "Next: Operations",
+    };
+  }
+  if (dash.pendingApprovals > 0 || status === "pending_admin_approval") {
+    return {
+      title: "A different admin needs to approve the week.",
+      copy: "The creator cannot approve their own proposal. Use reviewer@cit.local.",
+      href: "/approvals",
+      label: "Next: Approvals",
+    };
+  }
+  return {
+    title: "The week is approved. Read it or decide venues.",
+    copy: "Open Timetable, click the approved week, then a student group.",
+    href: "/schedule",
+    label: "Next: Timetable",
+  };
+}
+
+export function NextGuide({ path }: { path: string }) {
+  const [dash, setDash] = useState<Dash | null>(null);
+  useEffect(() => {
+    api<Dash>("/api/v1/dashboard").then((result) => {
+      if (result.data) setDash(result.data);
+    });
+  }, [path]);
+  const hint = pageHints[path] ?? fromState(dash);
+  return (
+    <div className="next-guide">
+      <span>Do this next</span>
+      <div>
+        <strong>{hint.title}</strong>
+        <p>{hint.copy}</p>
+      </div>
+      <Link href={hint.href}>{hint.label}</Link>
+    </div>
+  );
+}

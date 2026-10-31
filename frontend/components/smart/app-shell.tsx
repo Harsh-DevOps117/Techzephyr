@@ -1,38 +1,76 @@
 "use client";
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { api } from "../../lib/api";
 import { BriefcaseIcon, CalendarIcon, CheckIcon, DatabaseIcon, GridIcon, MenuIcon, SparkIcon, WrenchIcon } from "../ui/icons";
+import { NextGuide } from "./next-guide";
 
 const links = [
-  { href: "/", label: "Overview", icon: GridIcon },
-  { href: "/schedule", label: "Timetable", icon: CalendarIcon },
-  { href: "/bookings", label: "Venue requests", icon: SparkIcon },
-  { href: "/repair", label: "Schedule changes", icon: WrenchIcon },
+  { href: "/dashboard", label: "Workspace", icon: GridIcon },
+  { href: "/datasets", label: "1 · Data", icon: DatabaseIcon },
+  { href: "/schedule", label: "2 · Timetable", icon: CalendarIcon },
+  { href: "/approvals", label: "3 · Approvals", icon: CheckIcon },
+  { href: "/bookings", label: "4 · Venues", icon: SparkIcon },
+  { href: "/repair", label: "Changes", icon: WrenchIcon },
   { href: "/manual", label: "Manual events", icon: CalendarIcon },
-  { href: "/approvals", label: "Approvals", icon: CheckIcon },
-  { href: "/datasets", label: "Data manager", icon: DatabaseIcon },
-  { href: "/jobs", label: "Operations", icon: BriefcaseIcon },
+  { href: "/jobs", label: "Jobs", icon: BriefcaseIcon },
 ];
+
+const publicPaths = new Set(["/", "/login"]);
+
+type Profile = { display_name: string; email: string; role: string; department: string | null };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [role, setRole] = useState("Admin");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [savedName, setSavedName] = useState("CIT user");
+  const [savedRole, setSavedRole] = useState("admin");
   useEffect(() => {
-    setRole((localStorage.getItem("tz_role") ?? "admin").replaceAll("_", " "));
     if (process.env.NODE_ENV === "production") navigator.serviceWorker?.register("/sw.js");
     else navigator.serviceWorker?.getRegistrations().then((items) => items.forEach((item) => item.unregister()));
-    if (path !== "/login" && !localStorage.getItem("tz_access_token")) router.replace("/login");
+    if (!publicPaths.has(path)) {
+      setSavedRole(localStorage.getItem("tz_role") ?? "admin");
+      setSavedName(localStorage.getItem("tz_name") ?? "CIT user");
+      if (!localStorage.getItem("tz_access_token")) router.replace("/login");
+    }
   }, [path, router]);
-  if (path === "/login") return <>{children}</>;
-  return <div className="app-layout">
-    <aside className={`sidebar ${open ? "open" : ""}`}>
-      <Link className="brand" href="/" onClick={() => setOpen(false)}><span className="mark">C</span><span><b>CIT</b><small>Campus Operations</small></span></Link>
-      <nav aria-label="Primary navigation">{links.map(({ href, label, icon: NavIcon }) => <Link className={path === href ? "active" : ""} href={href} key={href} onClick={() => setOpen(false)}><NavIcon/><span>{label}</span></Link>)}</nav>
-      <div className="sidebar-foot"><span className="avatar">CA</span><div><strong>CIT Admin</strong><small>{role}</small></div><button onClick={() => { localStorage.clear(); router.push("/login"); }} aria-label="Sign out">↗</button></div>
-    </aside>
-    <div className="app-content"><div className="mobile-bar"><button onClick={() => setOpen(!open)} aria-label="Toggle menu"><MenuIcon/></button><span>CIT Campus Operations</span><i/></div>{children}</div>
-  </div>;
+  useEffect(() => {
+    if (publicPaths.has(path) || !localStorage.getItem("tz_access_token")) return;
+    api<Profile>("/api/v1/auth/me").then((result) => {
+      if (result.data) {
+        setProfile(result.data);
+        localStorage.setItem("tz_role", result.data.role);
+        localStorage.setItem("tz_name", result.data.display_name);
+      }
+    });
+  }, [path]);
+  if (publicPaths.has(path)) return <>{children}</>;
+  const role = (profile?.role ?? savedRole).replaceAll("_", " ");
+  const name = profile?.display_name ?? savedName;
+  const initials = name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
+  return (
+    <div className="app-layout">
+      <aside className={`sidebar ${open ? "open" : ""}`}>
+        <Link className="brand" href="/dashboard" onClick={() => setOpen(false)}><span className="mark">C</span><span><b>CIT</b><small>Campus week</small></span></Link>
+        <p className="side-kicker">Follow the numbers</p>
+        <nav aria-label="Primary navigation">{links.map(({ href, label, icon: NavIcon }) => <Link className={path === href ? "active" : ""} href={href} key={href} onClick={() => setOpen(false)}><NavIcon /><span>{label}</span></Link>)}</nav>
+        <div className="sidebar-foot">
+          <Link href="/profile" onClick={() => setOpen(false)} className="who">
+            <span className="avatar">{initials}</span>
+            <div><strong>{name}</strong><small>{role}</small></div>
+          </Link>
+          <button onClick={() => { localStorage.clear(); router.push("/"); }} aria-label="Sign out">↗</button>
+        </div>
+      </aside>
+      <div className="app-content">
+        <div className="mobile-bar"><button onClick={() => setOpen(!open)} aria-label="Toggle menu"><MenuIcon /></button><span>CIT Campus</span><Link href="/profile">Profile</Link></div>
+        <NextGuide path={path} />
+        {children}
+      </div>
+    </div>
+  );
 }

@@ -1,185 +1,128 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api } from "../lib/api";
-import type { BookingDraft } from "../lib/types";
-import { roomCards, scheduleCards, useApiList, useCatalog, type ScheduleSummary } from "../lib/catalog";
-import { PickerCards } from "../components/smart/picker-cards";
-import { ArrowIcon, CalendarIcon, CheckIcon, SparkIcon, WrenchIcon } from "../components/ui/icons";
+import { useEffect, useState } from "react";
 
-const timetable = [
-  { day: "MON", period: 2, span: 1, course: "MA101", label: "Calculus", room: "LH-1", tone: "blue" },
-  { day: "MON", period: 4, span: 1, course: "CS101", label: "Programming", room: "LH-3", tone: "purple" },
-  { day: "TUE", period: 2, span: 3, course: "CS101", label: "Programming Lab", room: "LAB-CS-1", tone: "purple" },
-  { day: "WED", period: 3, span: 1, course: "PH101", label: "Physics", room: "LH-2", tone: "amber" },
-  { day: "THU", period: 2, span: 1, course: "MA101", label: "Calculus", room: "LH-1", tone: "blue" },
-  { day: "FRI", period: 6, span: 1, course: "HS101", label: "Communication", room: "CR-204", tone: "green" },
-];
-const days = ["MON", "TUE", "WED", "THU", "FRI"];
-const periodTime = ["08", "09", "10", "11", "12", "14", "15", "16", "17"];
-
-export default function Home() {
-  const schedules = useApiList<ScheduleSummary>("/api/v1/schedules");
-  const approved = schedules.items.filter((item) => item.status === "approved");
-  const [request, setRequest] = useState("seminar hall kal shaam 6 baje, 2 ghante, 100 log, mic chahiye");
-  const [status, setStatus] = useState("Describe a venue request in English or Hinglish.");
-  const [draft, setDraft] = useState<BookingDraft | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [bookingTitle, setBookingTitle] = useState("Campus venue request");
-  const [bookingSchedule, setBookingSchedule] = useState("");
-  const [bookingCategory, setBookingCategory] = useState("club_event");
-  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
-  const [overview, setOverview] = useState<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { hardViolations: number; softPenalty: number } | null } | null>(null);
-  const catalog = useCatalog(bookingSchedule);
-  const eventRooms = useMemo(
-    () => (catalog.catalog?.rooms ?? []).filter((room) => room.allowedUses.includes("event")),
-    [catalog.catalog],
-  );
-
+export default function Landing() {
+  const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
-    fetch("/backend/health").then((response) => setApiOnline(response.ok)).catch(() => setApiOnline(false));
-    api<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { hardViolations: number; softPenalty: number } | null }>("/api/v1/dashboard").then((response) => response.data && setOverview(response.data));
+    setSignedIn(Boolean(localStorage.getItem("tz_access_token")));
   }, []);
-
-  useEffect(() => {
-    if (!draft?.requested_room || eventRooms.length === 0) return;
-    const needle = draft.requested_room.toLowerCase();
-    const match = eventRooms.find((room) => room.id.toLowerCase() === needle || room.name.toLowerCase() === needle);
-    if (match && draft.requested_room !== match.id) setDraft({ ...draft, requested_room: match.id });
-  }, [draft, eventRooms]);
-
-  async function parse(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setStatus("Reading your request…");
-    const response = await api<{ draft: BookingDraft }>("/api/v1/ai/booking-drafts", { method: "POST", body: JSON.stringify({ text: request }) });
-    setBusy(false);
-    if (!response.data) {
-      setStatus(response.error ?? "AI is unavailable. The manual venue form remains available.");
-      return;
-    }
-    setDraft(response.data.draft);
-    setStatus("Draft created — review every field before submission.");
-  }
-
-  function useManualForm() {
-    setDraft({ attendance: null, duration_periods: null, windows: [{ day: "MON", from_period: 10, to_period: 11 }], room_types: ["seminar_hall"], needs: [], requested_room: null, mandatory_for_groups: [], assumptions: [], follow_up: null });
-    setStatus("Manual form opened. Fill every field before submitting.");
-  }
-
-  async function submitDraft() {
-    if (!draft) return;
-    setBusy(true);
-    const response = await api<{ status: string; proposedDecision: { status: string; reason: string } }>("/api/v1/booking-requests", {
-      method: "POST",
-      body: JSON.stringify({ scheduleVersionId: bookingSchedule, title: bookingTitle, requestedCategory: bookingCategory, draft }),
-    });
-    setBusy(false);
-    if (!response.data) {
-      setStatus(response.error ?? "Request could not be submitted");
-      return;
-    }
-    setStatus(`Submitted for review · ${response.data.proposedDecision.status.replaceAll("_", " ")}: ${response.data.proposedDecision.reason}`);
-  }
-
-  const roomChoices = [
-    { id: "", title: "Any suitable room", description: "Let the rules pick a venue that fits", meta: "No preference" },
-    ...roomCards(eventRooms),
-  ];
-
+  const enter = signedIn ? "/dashboard" : "/login";
   return (
-    <main className="dashboard">
-      <header className="topline">
-        <div>
-          <p className="eyebrow">CAMPUS CONTROL CENTRE</p>
-          <h1>Good morning, CIT Admin.</h1>
-          <p>Here’s what needs your attention across campus.</p>
+    <div className="landing">
+      <header className="land-nav">
+        <Link href="/" className="land-logo"><span>C</span> TechZephyr</Link>
+        <nav>
+          <a href="#how">How it works</a>
+          <a href="#roles">Who it’s for</a>
+          <a href="#week">The week</a>
+        </nav>
+        <div className="land-nav-actions">
+          <Link href="/login" className="ghost">Log in</Link>
+          <Link href={enter} className="pill">Open workspace</Link>
         </div>
-        <div className={`api-state ${apiOnline === false ? "offline" : ""}`}><i />{apiOnline === null ? "Checking services" : apiOnline ? "All services operational" : "API unavailable"}</div>
       </header>
-      <section className="attention-grid">
-        <article className="attention hero-card"><span className="card-icon coral"><CalendarIcon /></span><div><small>TIMETABLE</small><strong>{overview?.counts.sessions ?? 189} sessions</strong><p>{overview?.latestSchedule ? `${overview.latestSchedule.hardViolations} hard conflicts · ${overview.roomUtilization}% room utilisation` : "Ready to generate from the CIT dataset."}</p></div><Link href="/schedule">Open scheduler <ArrowIcon /></Link></article>
-        <article className="attention"><span className="card-icon violet"><WrenchIcon /></span><div><small>CHANGES</small><strong>Repair safely</strong><p>Upload disruptions and review every move.</p></div><Link href="/repair">Plan a repair <ArrowIcon /></Link></article>
-        <article className="attention"><span className="card-icon mint"><SparkIcon /></span><div><small>SPECTRA WEEK</small><strong>{overview?.counts.bookingRequests ?? 25} requests</strong><p>{overview?.pendingApprovals ?? 0} validated proposals await approval.</p></div><Link href="/bookings">Review requests <ArrowIcon /></Link></article>
-      </section>
-      <section className="dashboard-grid">
-        <article className="panel timetable-panel">
-          <div className="panel-title"><div><p className="eyebrow">TIMETABLE PREVIEW</p><h2>Year 2 · Computer Science</h2></div><Link href="/schedule">Full timetable <ArrowIcon /></Link></div>
-          <div className="timetable">
-            <div className="times"><span />{periodTime.map((period) => <span key={period}>{period}:00</span>)}</div>
-            {days.map((day) => (
-              <div className="day-column" key={day}>
-                <b>{day}</b>
-                {timetable.filter((event) => event.day === day).map((event) => (
-                  <div key={event.course + event.period} className={`event ${event.tone}`} style={{ top: `${42 + (event.period - 1) * 42}px`, height: `${event.span * 38}px` }}>
-                    <strong>{event.course}</strong><span>{event.label}</span><small>{event.room}</small>
-                  </div>
-                ))}
-              </div>
-            ))}
+
+      <section className="hero">
+        <p className="chip">Chilika Institute of Technology · one campus week</p>
+        <h1>Never double-book a room again.</h1>
+        <p className="lede">Classes, midsems and Spectra week live in one timetable. You click a card. The rules decide if it fits.</p>
+        <div className="hero-actions">
+          <Link href={enter} className="pill">Open workspace</Link>
+          <a href="#how" className="ghost">See the four steps</a>
+        </div>
+        <p className="backed">Demo roles are ready · admin, reviewer, coordinator, faculty, club</p>
+        <div className="hero-stage" aria-hidden="true">
+          <div className="blob yellow" />
+          <div className="blob pink" />
+          <article className="paper-card">
+            <h2>Week 7 · CIT</h2>
+            <p><b>Objective:</b> keep every lecture, lab and Spectra booking in a room that is actually free.</p>
+            <p><b>Monday:</b> MA101 in Lecture Hall 1, then CS101 lab.</p>
+            <p><b>Spectra:</b> auditorium held for the institute event. The club request moves.</p>
+          </article>
+          <div className="crowd">
+            <i className="person p1" /><i className="person p2" /><i className="person p3" /><i className="person p4" />
           </div>
-          <div className="legend-row"><span><i className="blue" /> Lecture</span><span><i className="purple" /> Lab</span><span><i className="amber" /> Tutorial</span><small>Preview data · connect a generated schedule for live placements</small></div>
+        </div>
+      </section>
+
+      <section className="feature-bar" id="week">
+        <article><b>Timetable</b><span>Every lecture, tutorial and lab, with no clashes.</span></article>
+        <article><b>Exams</b><span>Midsems the week after, rooms at half capacity.</span></article>
+        <article><b>Spectra</b><span>Venue requests in English or Hinglish, with a reason.</span></article>
+        <article><b>Repairs</b><span>A faculty leave or closed room moves as few classes as possible.</span></article>
+        <article><b>Approval</b><span>Nothing goes live until a different admin says yes.</span></article>
+      </section>
+
+      <section className="how" id="how">
+        <h2>Four clicks. Then the week is real.</h2>
+        <div className="how-row">
+          <article>
+            <span>1</span>
+            <h3>Import</h3>
+            <p>Drop in cit_public.json. A card appears. You never copy an id.</p>
+          </article>
+          <em>→</em>
+          <article>
+            <span>2</span>
+            <h3>Generate</h3>
+            <p>Click that dataset card. The solver places every session.</p>
+          </article>
+          <em>→</em>
+          <article>
+            <span>3</span>
+            <h3>Approve</h3>
+            <p>A second admin reviews the proposal. Creators cannot approve themselves.</p>
+          </article>
+          <em>→</em>
+          <article>
+            <span>4</span>
+            <h3>Use it</h3>
+            <p>Open a group, faculty or room. Decide Spectra requests on top.</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="split">
+        <article className="yellow-note">
+          <p className="chip dark">Workspace</p>
+          <h2>One app for the whole week.</h2>
+          <p>A yellow bar on every screen says what to click next, and a green button takes you there.</p>
+          <p className="fine">Replaces the spreadsheet, the WhatsApp room chase, and guessing which id to paste.</p>
         </article>
-        <article className="panel assistant-panel">
-          <div className="assistant-title"><span className="card-icon coral"><SparkIcon /></span><div><p className="eyebrow">REQUEST ASSISTANT</p><h2>Book a venue naturally</h2></div></div>
-          <p>Tell us what you need. AI fills the form; deterministic rules decide availability.</p>
-          <form onSubmit={parse}>
-            <label>Your request<textarea value={request} onChange={(event) => setRequest(event.target.value)} /></label>
-            <button className="primary" disabled={busy}>{busy ? "Creating draft…" : "Create editable draft"}<ArrowIcon /></button>
-            <button type="button" className="secondary manual-fallback" onClick={useManualForm}>Use manual form</button>
-          </form>
-          <p className="helper-text">{status}</p>
-          {draft && (
-            <div className="draft-card">
-              <div className="draft-head"><span><CheckIcon /> Draft ready</span><small>Not submitted</small></div>
-              <div className="draft-fields">
-                <label>Attendance<input type="number" value={draft.attendance ?? ""} onChange={(event) => setDraft({ ...draft, attendance: event.target.value ? Number(event.target.value) : null })} /></label>
-                <label>Duration<input type="number" value={draft.duration_periods ?? ""} onChange={(event) => setDraft({ ...draft, duration_periods: event.target.value ? Number(event.target.value) : null })} /></label>
-                <label>Needs<input value={draft.needs.join(", ")} onChange={(event) => setDraft({ ...draft, needs: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} /></label>
-                <label>Request title<input value={bookingTitle} onChange={(event) => setBookingTitle(event.target.value)} /></label>
-                <label>Category
-                  <select value={bookingCategory} onChange={(event) => setBookingCategory(event.target.value)}>
-                    <option value="club_event">Club event</option>
-                    <option value="department_event">Department event</option>
-                    <option value="guest_lecture">Guest lecture</option>
-                    <option value="institute_event">Institute event</option>
-                  </select>
-                </label>
-              </div>
-              <PickerCards
-                label="Approved timetable"
-                hint="The request is checked against this published schedule"
-                items={scheduleCards(approved)}
-                selectedId={bookingSchedule}
-                onSelect={setBookingSchedule}
-                loading={schedules.loading}
-                error={schedules.error}
-                empty="Approve a timetable before submitting a venue request."
-              />
-              {bookingSchedule && (
-                <PickerCards
-                  label="Preferred room"
-                  hint="Optional. Any suitable room leaves the choice to the rules."
-                  items={roomChoices}
-                  selectedId={draft.requested_room ?? ""}
-                  onSelect={(id) => setDraft({ ...draft, requested_room: id || null })}
-                  loading={catalog.loading}
-                  error={catalog.error}
-                  empty="This timetable has no event rooms."
-                />
-              )}
-              {draft.follow_up && <p className="follow-up">Needs clarification: {draft.follow_up}</p>}
-              <button type="button" className="primary wide" disabled={busy || !bookingSchedule || !!draft.follow_up} onClick={submitDraft}>Submit for deterministic review <ArrowIcon /></button>
-            </div>
-          )}
+        <article className="mock-board">
+          <header><b>Approved week</b><small>0 hard conflicts</small></header>
+          <div className="mock-grid">
+            <span>MON · P3</span><strong>CS101</strong><em>Classroom A-101</em>
+            <span>MON · P5</span><strong>MA101</strong><em>Lecture Hall 2</em>
+            <span>TUE · P2</span><strong>CS101 lab</strong><em>Computer lab</em>
+          </div>
         </article>
       </section>
-      <section className="trust-strip">
-        <span><CheckIcon /> AI never approves a booking</span>
-        <span><CheckIcon /> Every proposal is code-validated</span>
-        <span><CheckIcon /> Admin approval required for changes</span>
+
+      <section className="roles" id="roles">
+        <div className="role-board">
+          <h2>Designed for the people who actually touch the week.</h2>
+          <div className="stickies">
+            <article className="sticky yellow"><b>Admin</b><p>Import the data, generate the week, and approve someone else’s proposal.</p></article>
+            <article className="sticky pink"><b>Reviewer</b><p>The second admin. You approve the timetable the first admin created.</p></article>
+            <article className="sticky blue"><b>Faculty</b><p>See your own week and ask for a change when you are away.</p></article>
+            <article className="sticky mint"><b>Clubs</b><p>Ask for a room in plain language and read why it was approved or moved.</p></article>
+          </div>
+        </div>
       </section>
-    </main>
+
+      <section className="quote">
+        <p>“I can see the room, the reason, and the next button. I don’t have to ask anyone for an id.”</p>
+        <small>Campus operations · Chilika Institute of Technology</small>
+      </section>
+
+      <footer className="land-foot">
+        <div><b>TechZephyr</b><span>CIT campus scheduling</span></div>
+        <Link href={enter} className="pill">Enter the workspace</Link>
+      </footer>
+    </div>
   );
 }

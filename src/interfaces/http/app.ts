@@ -232,6 +232,24 @@ export function createApp() {
     }),
   );
 
+  app.get(
+    "/api/v1/auth/me",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const found = await query<{
+        id: string;
+        email: string;
+        display_name: string;
+        role: string;
+        department: string | null;
+      }>(
+        "SELECT id, email, display_name, role, department FROM app_user WHERE id = $1",
+        [req.actor!.id],
+      );
+      res.json(found.rows[0]);
+    }),
+  );
+
   app.post(
     "/api/v1/datasets/import",
     requireRole("admin"),

@@ -43,6 +43,13 @@ paths:
                   expiresIn: { type: integer, example: 900 }
                   role: { type: string, example: admin }
         '401': { description: Invalid credentials }
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Read the signed-in campus profile
+      responses:
+        '200': { description: Name, email, role and department }
+        '401': { description: Not signed in }
   /health:
     get:
       security: []
