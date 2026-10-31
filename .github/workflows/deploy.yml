@@ -71,28 +71,49 @@ jobs:
           }
           key="$(pick PEM SSH_PRIVATE_KEY SSH_KEY PRIVATE_KEY KEY DEPLOY_KEY)"
           ip="$(pick HOST_IP SERVER_IP IP HOST HOSTIP IP_ADDRESS PUBLIC_IP SERVER_HOST SSH_HOST EC2_HOST EC2_IP EC2_PUBLIC_IP DEPLOY_HOST DEPLOY_IP REMOTE_HOST REMOTE_IP VPS_IP VPS_HOST)"
-          name="$(pick HOST_NAME NAME SSH_USER USERNAME USER_NAME SERVER_NAME SERVER_USER HOSTNAME EC2_USER SSH_USERNAME DEPLOY_USER HOST_USER LOGIN_USER || true)"
-          user="${name:-ubuntu}"
-          if [[ "$user" == *.* ]]; then
-            user="${SSH_USER:-${EC2_USER:-${DEPLOY_USER:-ubuntu}}}"
-            echo "Name looks like a hostname. SSH user is ${user}."
-          else
-            echo "SSH user is ${user}."
-          fi
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "$key" | sed 's/\\n/\n/g' > ~/.ssh/deploy.pem
+          printf '%s\n' "$key" | sed 's/\\n/\n/g' | tr -d '\r' > ~/.ssh/deploy.pem
           if ! grep -q "BEGIN .*PRIVATE KEY" ~/.ssh/deploy.pem; then
-            base64 -d ~/.ssh/deploy.pem > ~/.ssh/deploy.pem.decoded
-            mv ~/.ssh/deploy.pem.decoded ~/.ssh/deploy.pem
+            base64 -d ~/.ssh/deploy.pem > ~/.ssh/deploy.pem.decoded || true
+            if [ -s ~/.ssh/deploy.pem.decoded ]; then
+              mv ~/.ssh/deploy.pem.decoded ~/.ssh/deploy.pem
+            fi
           fi
           chmod 600 ~/.ssh/deploy.pem
-          ssh -i ~/.ssh/deploy.pem \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=accept-new \
-            -o ServerAliveInterval=30 \
-            "${user}@${ip}" \
-            "PUBLIC_ORIGIN=http://${ip} bash -s" <<'REMOTE'
+          if ! ssh-keygen -y -f ~/.ssh/deploy.pem >/dev/null; then
+            echo "The private key secret is not a readable SSH private key."
+            exit 1
+          fi
+          echo "Private key parsed."
+          candidates=()
+          add_user() {
+            local candidate="$1"
+            [ -n "$candidate" ] || return 0
+            [[ "$candidate" == *.* ]] && return 0
+            if [ "${#candidates[@]}" -gt 0 ]; then
+              local existing
+              for existing in "${candidates[@]}"; do
+                [ "$existing" = "$candidate" ] && return 0
+              done
+            fi
+            candidates+=("$candidate")
+          }
+          add_user "${SSH_USERNAME:-}"
+          add_user "${SSH_USER:-}"
+          add_user "${EC2_USER:-}"
+          add_user "${SERVER_USER:-}"
+          add_user "${DEPLOY_USER:-}"
+          add_user "${HOST_USER:-}"
+          add_user "${LOGIN_USER:-}"
+          add_user "${USERNAME:-}"
+          add_user "${USER_NAME:-}"
+          add_user "${HOST_NAME:-}"
+          add_user "${NAME:-}"
+          add_user ubuntu
+          add_user ec2-user
+          add_user admin
+          cat > /tmp/remote-deploy.sh <<'REMOTE'
           set -euo pipefail
           if ! command -v git >/dev/null 2>&1; then
             sudo apt-get update
@@ -145,3 +166,26 @@ jobs:
           curl -fsS http://127.0.0.1/health
           echo
           REMOTE
+          auth_user=""
+          for user in "${candidates[@]}"; do
+            if ssh -i ~/.ssh/deploy.pem \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=accept-new \
+              -o PreferredAuthentications=publickey \
+              -o ConnectTimeout=15 \
+              "${user}@${ip}" true; then
+              auth_user="$user"
+              echo "SSH key accepted."
+              break
+            fi
+          done
+          if [ -z "$auth_user" ]; then
+            echo "The server rejected the key for every SSH user candidate. Install this public key in that user's authorized_keys."
+            exit 1
+          fi
+          ssh -i ~/.ssh/deploy.pem \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ServerAliveInterval=30 \
+            "${auth_user}@${ip}" \
+            "PUBLIC_ORIGIN=http://${ip} bash -s" < /tmp/remote-deploy.sh
