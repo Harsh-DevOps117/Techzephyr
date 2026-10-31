@@ -207,11 +207,45 @@ The API contract is available at [docs/openapi.yaml](docs/openapi.yaml) and whil
 
 ### Run locally
 
-1. Put the Groq key only in a local `.env` as `GROQ_API_KEY=...` if AI parsing is needed. It is optional for all other features.
-2. Start the complete stack with `docker compose up -d --build`.
-3. Check readiness with `docker compose ps`, `curl http://localhost:3000/health`, then open the PWA at `http://localhost:3001`.
+Copy `.env.example` to `.env` before starting. Every variable is listed there. Leave `GROQ_API_KEY` empty unless you want natural-language parsing; scheduling, manual booking, approvals and exports work without it. The values in `.env.example` are local-development placeholders, not production secrets.
 
-Compose starts PostgreSQL, RabbitMQ, Redis, the API (including migrations), and the worker. No host `DATABASE_URL`, `RABBITMQ_URL`, or `REDIS_URL` is required. Use `npm run check` for TypeScript validation when developing locally.
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `RABBITMQ_URL` | RabbitMQ connection string |
+| `REDIS_URL` | Redis connection string |
+| `ALLOWED_ORIGIN` | Browser origins allowed to call the API |
+| `DATA_ROOT` | Dataset directory (`./data`) |
+| `VALIDATOR_PATH` | Official `validator.py` |
+| `PYTHON_BIN` | Python used to run the validator |
+| `GROQ_API_KEY` | Optional Groq key for draft extraction only |
+| `GROQ_MODEL` | Groq model name |
+| `JWT_SECRET` | Development signing secret; replace before any shared deployment |
+| `PORT` | API port, default `3000` |
+| `DB_POOL_MAX` | PostgreSQL pool size |
+
+**Docker Compose (full stack)**
+
+1. `cp .env.example .env` and, only if you want AI drafts, set `GROQ_API_KEY` in that file.
+2. `docker compose up -d --build`
+3. `docker compose ps`, then `curl http://localhost:3000/health`
+4. Open the app at `http://localhost:3001` and sign in with a demo account. The API is on port `3000`. Swagger UI is at `http://localhost:8080`.
+
+Compose starts PostgreSQL, RabbitMQ, Redis, the API (including migrations), the worker and the PWA. No host `DATABASE_URL` is required for that path; Compose injects its own local credentials.
+
+**Host processes (without Compose)**
+
+Use this when Docker is not available. PostgreSQL, Redis and RabbitMQ must already be listening on the hosts in `.env.example`.
+
+1. `cp .env.example .env`
+2. `npm ci && npm run db:migrate`
+3. `npm run dev` for the API and, in a second terminal, `npm run worker`
+4. `cd frontend && npm ci && npm run dev`
+5. Open `http://localhost:3001`. The frontend proxies `/backend` to `http://localhost:3000`.
+
+End users never type a schedule, dataset, job, room or group identifier. Each screen loads the available records and shows them as cards; the selected identifier is sent by the app.
+
+Use `npm run check` in the repository root, and `npm run check` inside `frontend/`, for TypeScript validation when developing locally.
 
 Only the API is exposed on port `3000`; PostgreSQL, RabbitMQ, and Redis are private to the Compose network. The Compose credentials are for local development only and must be replaced for deployment. `docker compose down` stops services while preserving data; add `-v` only when a full local reset is intended.
 

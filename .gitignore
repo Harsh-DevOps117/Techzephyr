@@ -1,4 +1,5 @@
 node_modules/
+frontend/AGENTS.md
 dist/
 .env
 exports/*.tmp
