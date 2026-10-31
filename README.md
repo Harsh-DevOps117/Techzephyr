@@ -299,6 +299,14 @@ Both must be produced by the app. Files made or edited by hand lead to disqualif
 
 Regenerate them with `npm run exports:generate`; both commands are also checked by the official validator during release verification.
 
+## Production notes
+
+- Set a unique `JWT_SECRET` of at least 32 characters. The API refuses to boot in production if the development placeholder is still set.
+- Header auth (`x-user-id`) is off when `NODE_ENV=production`. Sign in with email and password. Access tokens refresh through `/api/v1/auth/refresh` and logout revokes the refresh token.
+- Logs are JSON via Winston in production (`LOG_LEVEL`). They include request id, status, and duration, and they do not include passwords or tokens.
+- The workspace has a bottom-right voice button. It drafts a booking or a schedule change and speaks the result. `llm-guardrails` blocks injection, secrets, and any request to approve or skip the validator.
+- GitHub Actions (`.github/workflows/ci.yml`) typechecks the API and the web app, then builds the API image.
+
 ## Known limitations
 
 - Natural-language draft extraction requires a configured Groq key; all deterministic scheduling, manual event entry and dataset workflows continue without it.

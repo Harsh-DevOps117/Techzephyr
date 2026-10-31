@@ -8,16 +8,7 @@ import { roomCards, scheduleCards, useApiList, useCatalog, type ScheduleSummary 
 import { PickerCards } from "../../components/smart/picker-cards";
 import { ArrowIcon, CalendarIcon, CheckIcon, SparkIcon, WrenchIcon } from "../../components/ui/icons";
 
-const timetable = [
-  { day: "MON", period: 2, span: 1, course: "MA101", label: "Calculus", room: "LH-1", tone: "blue" },
-  { day: "MON", period: 4, span: 1, course: "CS101", label: "Programming", room: "LH-3", tone: "purple" },
-  { day: "TUE", period: 2, span: 3, course: "CS101", label: "Programming Lab", room: "LAB-CS-1", tone: "purple" },
-  { day: "WED", period: 3, span: 1, course: "PH101", label: "Physics", room: "LH-2", tone: "amber" },
-  { day: "THU", period: 2, span: 1, course: "MA101", label: "Calculus", room: "LH-1", tone: "blue" },
-  { day: "FRI", period: 6, span: 1, course: "HS101", label: "Communication", room: "CR-204", tone: "green" },
-];
-const days = ["MON", "TUE", "WED", "THU", "FRI"];
-const periodTime = ["08", "09", "10", "11", "12", "14", "15", "16", "17"];
+type LiveItem = { session_id: string; day: string; start_period: number; room_id: string; courseId: string; kind: string; duration: number };
 
 export default function Home() {
   const schedules = useApiList<ScheduleSummary>("/api/v1/schedules");
@@ -30,7 +21,8 @@ export default function Home() {
   const [bookingSchedule, setBookingSchedule] = useState("");
   const [bookingCategory, setBookingCategory] = useState("club_event");
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
-  const [overview, setOverview] = useState<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { hardViolations: number; softPenalty: number } | null } | null>(null);
+  const [overview, setOverview] = useState<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { id: string; hardViolations: number; softPenalty: number } | null } | null>(null);
+  const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
   const catalog = useCatalog(bookingSchedule);
   const eventRooms = useMemo(
     () => (catalog.catalog?.rooms ?? []).filter((room) => room.allowedUses.includes("event")),
@@ -39,8 +31,19 @@ export default function Home() {
 
   useEffect(() => {
     fetch("/backend/health").then((response) => setApiOnline(response.ok)).catch(() => setApiOnline(false));
-    api<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { hardViolations: number; softPenalty: number } | null }>("/api/v1/dashboard").then((response) => response.data && setOverview(response.data));
+    api<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { id: string; hardViolations: number; softPenalty: number } | null }>("/api/v1/dashboard").then((response) => response.data && setOverview(response.data));
   }, []);
+
+  useEffect(() => {
+    const scheduleId = overview?.latestSchedule?.id;
+    if (!scheduleId) {
+      setLiveItems([]);
+      return;
+    }
+    api<{ items: LiveItem[] }>(`/api/v1/schedules/${scheduleId}/timetable`).then((response) => {
+      if (response.data) setLiveItems(response.data.items.slice(0, 8));
+    });
+  }, [overview?.latestSchedule?.id]);
 
   useEffect(() => {
     if (!draft?.requested_room || eventRooms.length === 0) return;
@@ -105,27 +108,21 @@ export default function Home() {
         <li><Link href="/bookings"><b>4</b><span>Decide venues</span><small>Spectra requests</small></Link></li>
       </ol>
       <section className="attention-grid">
-        <article className="attention hero-card"><span className="card-icon coral"><CalendarIcon /></span><div><small>TIMETABLE</small><strong>{overview?.counts.sessions ?? 189} sessions</strong><p>{overview?.latestSchedule ? `${overview.latestSchedule.hardViolations} hard conflicts · ${overview.roomUtilization}% room utilisation` : "Ready to generate from the CIT dataset."}</p></div><Link href="/schedule">Open scheduler <ArrowIcon /></Link></article>
+        <article className="attention hero-card"><span className="card-icon coral"><CalendarIcon /></span><div><small>TIMETABLE</small><strong>{overview ? `${overview.counts.sessions} sessions` : "No dataset yet"}</strong><p>{overview?.latestSchedule ? `${overview.latestSchedule.hardViolations} hard conflicts · ${overview.roomUtilization}% room utilisation` : "Import a dataset, then generate the week."}</p></div><Link href="/schedule">Open scheduler <ArrowIcon /></Link></article>
         <article className="attention"><span className="card-icon violet"><WrenchIcon /></span><div><small>CHANGES</small><strong>Repair safely</strong><p>Upload disruptions and review every move.</p></div><Link href="/repair">Plan a repair <ArrowIcon /></Link></article>
-        <article className="attention"><span className="card-icon mint"><SparkIcon /></span><div><small>SPECTRA WEEK</small><strong>{overview?.counts.bookingRequests ?? 25} requests</strong><p>{overview?.pendingApprovals ?? 0} validated proposals await approval.</p></div><Link href="/bookings">Review requests <ArrowIcon /></Link></article>
+        <article className="attention"><span className="card-icon mint"><SparkIcon /></span><div><small>SPECTRA WEEK</small><strong>{overview ? `${overview.counts.bookingRequests} requests` : "No requests yet"}</strong><p>{overview?.pendingApprovals ?? 0} validated proposals await approval.</p></div><Link href="/bookings">Review requests <ArrowIcon /></Link></article>
       </section>
       <section className="dashboard-grid">
         <article className="panel timetable-panel">
-          <div className="panel-title"><div><p className="eyebrow">TIMETABLE PREVIEW</p><h2>Year 2 · Computer Science</h2></div><Link href="/schedule">Full timetable <ArrowIcon /></Link></div>
-          <div className="timetable">
-            <div className="times"><span />{periodTime.map((period) => <span key={period}>{period}:00</span>)}</div>
-            {days.map((day) => (
-              <div className="day-column" key={day}>
-                <b>{day}</b>
-                {timetable.filter((event) => event.day === day).map((event) => (
-                  <div key={event.course + event.period} className={`event ${event.tone}`} style={{ top: `${42 + (event.period - 1) * 42}px`, height: `${event.span * 38}px` }}>
-                    <strong>{event.course}</strong><span>{event.label}</span><small>{event.room}</small>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className="legend-row"><span><i className="blue" /> Lecture</span><span><i className="purple" /> Lab</span><span><i className="amber" /> Tutorial</span><small>Preview data · connect a generated schedule for live placements</small></div>
+          <div className="panel-title"><div><p className="eyebrow">TIMETABLE PREVIEW</p><h2>{liveItems.length ? "Latest generated week" : "No live timetable yet"}</h2></div><Link href="/schedule">Full timetable <ArrowIcon /></Link></div>
+          {liveItems.length === 0 ? <p className="lede">Generate a week and this list fills from that schedule. Nothing here is sample data.</p> : (
+            <div className="schedule-table">
+              <div className="table-head"><span>When</span><span>Course</span><span>Kind</span><span>Room</span></div>
+              {liveItems.map((item) => (
+                <div key={item.session_id}><span>{item.day} · P{item.start_period}</span><span>{item.courseId}</span><span>{item.kind}</span><span>{item.room_id}</span></div>
+              ))}
+            </div>
+          )}
         </article>
         <article className="panel assistant-panel">
           <div className="assistant-title"><span className="card-icon coral"><SparkIcon /></span><div><p className="eyebrow">REQUEST ASSISTANT</p><h2>Book a venue naturally</h2></div></div>

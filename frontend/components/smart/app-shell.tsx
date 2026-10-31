@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { BriefcaseIcon, CalendarIcon, CheckIcon, DatabaseIcon, GridIcon, MenuIcon, SparkIcon, WrenchIcon } from "../ui/icons";
 import { NextGuide } from "./next-guide";
+import { VoiceAssistant } from "./voice-assistant";
 
 const links = [
   { href: "/dashboard", label: "Workspace", icon: GridIcon },
@@ -63,13 +64,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="avatar">{initials}</span>
             <div><strong>{name}</strong><small>{role}</small></div>
           </Link>
-          <button onClick={() => { localStorage.clear(); router.push("/"); }} aria-label="Sign out">↗</button>
+          <button onClick={() => { const refreshToken = localStorage.getItem("tz_refresh_token"); if (refreshToken) void api("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) }); localStorage.clear(); router.push("/"); }} aria-label="Sign out">↗</button>
         </div>
       </aside>
       <div className="app-content">
         <div className="mobile-bar"><button onClick={() => setOpen(!open)} aria-label="Toggle menu"><MenuIcon /></button><span>CIT Campus</span><Link href="/profile">Profile</Link></div>
         <NextGuide path={path} />
         {children}
+        <VoiceAssistant />
       </div>
     </div>
   );

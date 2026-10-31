@@ -13,7 +13,9 @@ import {
 } from "../../application/ai/booking-request-parser.js";
 import { bookingDraftSchema } from "../../domain/booking/booking-draft.js";
 import { parseScheduleChange } from "../../application/ai/schedule-change-parser.js";
-import { authenticate, login } from "../../application/auth/auth-service.js";
+import { authenticate, login, logout, refresh } from "../../application/auth/auth-service.js";
+import { assertAiInput, GuardrailBlockedError } from "../../application/ai/guardrails.js";
+import { logger } from "../../infrastructure/logging/logger.js";
 import {
   IdempotencyKeyReuseError,
   beginIdempotentCommand,
@@ -56,7 +58,17 @@ function asyncRoute(
 function requireRole(...allowed: Role[]) {
   return asyncRoute(async (req, _res, next) => {
     const bearer = req.header("authorization")?.match(/^Bearer (.+)$/i)?.[1];
-    const claims = bearer ? await authenticate(bearer) : null;
+    let claims: { id: string; role: string } | null = null;
+    if (bearer) {
+      try {
+        claims = await authenticate(bearer);
+      } catch {
+        throw new ApiError(401, "unauthenticated", "Sign in again");
+      }
+    }
+    if (!claims && !config.ALLOW_HEADER_AUTH) {
+      throw new ApiError(401, "unauthenticated", "Sign in again");
+    }
     const id = claims?.id ?? actorIdSchema.parse(req.header("x-user-id"));
     const role = roleSchema.parse(claims?.role ?? req.header("x-user-role"));
     const found = await query<{
@@ -180,12 +192,7 @@ const bookingSubmissionSchema = z.object({
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
-  const allowedOrigins = new Set([
-    ...config.ALLOWED_ORIGIN.split(",").map((origin) => origin.trim()),
-    "http://localhost:3001",
-    "http://localhost:8080",
-    "http://localhost:5173",
-  ]);
+  const allowedOrigins = new Set(config.ALLOWED_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean));
   app.use(
     cors({
       origin: (origin, callback) =>
@@ -203,6 +210,16 @@ export function createApp() {
         : uuidv7();
     (req as AuthedRequest).requestId = requestId;
     res.setHeader("x-request-id", requestId);
+    const started = Date.now();
+    res.on("finish", () => {
+      logger.info("http.request", {
+        method: req.method,
+        path: req.path,
+        status: res.statusCode,
+        ms: Date.now() - started,
+        requestId,
+      });
+    });
     next();
   });
 
@@ -247,6 +264,27 @@ export function createApp() {
         [req.actor!.id],
       );
       res.json(found.rows[0]);
+    }),
+  );
+
+  app.post(
+    "/api/v1/auth/refresh",
+    asyncRoute(async (req, res) => {
+      const refreshToken = z.object({ refreshToken: z.string().min(20) }).parse(req.body).refreshToken;
+      try {
+        res.json(await refresh(refreshToken));
+      } catch {
+        throw new ApiError(401, "invalid_refresh", "Sign in again");
+      }
+    }),
+  );
+
+  app.post(
+    "/api/v1/auth/logout",
+    asyncRoute(async (req, res) => {
+      const refreshToken = z.object({ refreshToken: z.string().min(20) }).parse(req.body).refreshToken;
+      await logout(refreshToken);
+      res.json({ status: "signed_out" });
     }),
   );
 
@@ -452,6 +490,42 @@ export function createApp() {
       const input = aiBookingRequestSchema.parse(req.body);
       const draft = await parseScheduleChange(input.text);
       res.json({ draft, validation: "schema_validated_only", requestId: req.requestId });
+    }),
+  );
+
+  app.post(
+    "/api/v1/ai/assistant",
+    rateLimit("ai-assistant", 10, 10 / 60),
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const input = aiBookingRequestSchema.parse(req.body);
+      assertAiInput(input.text);
+      const change = /\b(leave|unavailable|reschedul|move my class|faculty)\b/i.test(input.text);
+      if (!config.GROQ_API_KEY) {
+        res.json({
+          reply: "I can listen, but drafting needs a configured model. Use the manual form. I cannot approve or publish anything.",
+          intent: change ? "schedule_change" : "booking",
+          configured: false,
+        });
+        return;
+      }
+      if (change) {
+        const draft = await parseScheduleChange(input.text);
+        res.json({
+          reply: draft.follow_up ?? `I drafted ${draft.changes.length} schedule change${draft.changes.length === 1 ? "" : "s"}. Review them before anyone approves.`,
+          intent: "schedule_change",
+          draft,
+          configured: true,
+        });
+        return;
+      }
+      const draft = await parseBookingRequest(input.text);
+      res.json({
+        reply: draft.follow_up ?? `Draft ready${draft.attendance ? ` for ${draft.attendance} people` : ""}. It is not booked until you submit it on the workspace.`,
+        intent: "booking",
+        draft,
+        configured: true,
+      });
     }),
   );
 
@@ -846,11 +920,13 @@ export function createApp() {
         return res
           .status(503)
           .json({ code: "ai_unavailable", message: error.message, requestId });
+      if (error instanceof GuardrailBlockedError)
+        return res.status(400).json({ code: "guardrail_blocked", message: error.message, requestId });
       if (error instanceof ApiError)
         return res
           .status(error.status)
           .json({ code: error.code, message: error.message, requestId });
-      console.error(error);
+      logger.error("http.unhandled", { requestId, error });
       return res.status(500).json({
         code: "internal_error",
         message: "Unexpected server error",

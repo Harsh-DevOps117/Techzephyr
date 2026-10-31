@@ -99,4 +99,10 @@ main{max-width:1460px;margin:auto;padding:42px clamp(30px,4vw,68px) 64px}.eyebro
 .identity-card .ghost{grid-column:1/span 2;justify-self:start;border-color:#f6e56a;color:#f6e56a;background:transparent}
 .avatar.big{width:64px;height:64px;border-radius:18px;background:#f6e56a;color:#173224;display:grid;place-items:center;font-weight:800}
 .login-story{background:#173224}.login-story h1 em{color:#f6e56a}
-@media(max-width:900px){.feature-bar,.how-row,.split,.profile-grid,.step-rail{grid-template-columns:1fr}.how-row em{display:none}.land-nav{padding:14px 16px}.land-nav nav{display:none}.land-logo{font-size:16px}.ghost,.pill{padding:8px 12px;font-size:13px;white-space:nowrap}.next-guide{grid-template-columns:1fr;margin:12px 18px 0}.feature-bar article{border-left:0;border-top:1px solid rgba(246,243,234,.16)}.stickies{grid-template-columns:1fr}}
+.voice-dock{position:fixed;right:22px;bottom:22px;z-index:40;display:grid;justify-items:end;gap:10px}
+.voice-button{width:64px;height:64px;border-radius:50%;border:0;background:#173224;color:#f6e56a;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:18px;box-shadow:0 12px 30px rgba(23,50,36,.25)}
+.voice-panel{width:min(320px,calc(100vw - 36px));background:#fffdf8;border:1px solid #e4ddcf;border-radius:20px;padding:14px;box-shadow:0 16px 40px rgba(23,50,36,.12)}
+.voice-panel p{font-size:14px;line-height:1.4}
+.voice-panel textarea{width:100%;min-height:72px;border:1px solid #e4ddcf;border-radius:12px;padding:10px;background:#fff}
+.voice-actions{display:flex;justify-content:space-between;gap:8px;margin-top:8px}
+@media(max-width:900px){.feature-bar,.how-row,.split,.profile-grid,.step-rail{grid-template-columns:1fr}.how-row em{display:none}.land-nav{padding:14px 16px}.land-nav nav{display:none}.land-logo{font-size:16px}.ghost,.pill{padding:8px 12px;font-size:13px;white-space:nowrap}.next-guide{grid-template-columns:1fr;margin:12px 18px 0}.feature-bar article{border-left:0;border-top:1px solid rgba(246,243,234,.16)}.stickies{grid-template-columns:1fr}.voice-dock{right:12px;bottom:12px}}
