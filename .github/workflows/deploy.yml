@@ -1,0 +1,116 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, cursor/deploy-cicd-2111]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Connect and deploy
+        env:
+          PEM: ${{ secrets.PEM }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          HOST_IP: ${{ secrets.HOST_IP }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          IP: ${{ secrets.IP }}
+          HOST: ${{ secrets.HOST }}
+          HOST_NAME: ${{ secrets.HOST_NAME }}
+          NAME: ${{ secrets.NAME }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          USERNAME: ${{ secrets.USERNAME }}
+        run: |
+          set -euo pipefail
+          key="${PEM:-${SSH_PRIVATE_KEY:-${SSH_KEY:-${PRIVATE_KEY:-}}}}"
+          ip="${HOST_IP:-${SERVER_IP:-${IP:-${HOST:-}}}}"
+          name="${HOST_NAME:-${NAME:-${SSH_USER:-${USERNAME:-}}}}"
+          if [ -z "$key" ]; then
+            echo "No private key secret is set. Add PEM (or SSH_PRIVATE_KEY)."
+            exit 1
+          fi
+          if [ -z "$ip" ]; then
+            echo "No host IP secret is set. Add HOST_IP (or SERVER_IP)."
+            exit 1
+          fi
+          if [ -z "$name" ]; then
+            echo "No name secret is set. Add HOST_NAME as the SSH user, for example ubuntu."
+            exit 1
+          fi
+          user="$name"
+          if [[ "$name" == *.* ]]; then
+            user="${SSH_USER:-${USERNAME:-ubuntu}}"
+            echo "HOST_NAME looks like a hostname. SSH user is ${user}."
+          else
+            echo "SSH user is ${user}."
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$key" | sed 's/\\n/\n/g' > ~/.ssh/deploy.pem
+          if ! grep -q "BEGIN .*PRIVATE KEY" ~/.ssh/deploy.pem; then
+            base64 -d ~/.ssh/deploy.pem > ~/.ssh/deploy.pem.decoded
+            mv ~/.ssh/deploy.pem.decoded ~/.ssh/deploy.pem
+          fi
+          chmod 600 ~/.ssh/deploy.pem
+          ssh -i ~/.ssh/deploy.pem \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ServerAliveInterval=30 \
+            "${user}@${ip}" \
+            "PUBLIC_ORIGIN=http://${ip} bash -s" <<'REMOTE'
+          set -euo pipefail
+          if ! command -v git >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y git ca-certificates curl
+          fi
+          if ! command -v docker >/dev/null 2>&1; then
+            curl -fsSL https://get.docker.com | sudo sh
+            sudo usermod -aG docker "$USER" || true
+          fi
+          docker_cmd() {
+            if docker info >/dev/null 2>&1; then
+              docker "$@"
+            else
+              sudo docker "$@"
+            fi
+          }
+          app=/opt/techzephyr
+          if [ ! -d "$app/.git" ]; then
+            sudo mkdir -p /opt
+            sudo chown "$USER:$USER" /opt
+            git clone https://github.com/Harsh-DevOps117/Techzephyr.git "$app"
+          fi
+          cd "$app"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          if [ ! -f .env ]; then
+            cp .env.example .env
+            python3 - "$PUBLIC_ORIGIN" <<'PY'
+          import pathlib, secrets, sys
+          origin = sys.argv[1]
+          path = pathlib.Path(".env")
+          lines = []
+          for line in path.read_text().splitlines():
+              if line.startswith("JWT_SECRET="):
+                  lines.append("JWT_SECRET=" + secrets.token_urlsafe(48))
+              elif line.startswith("NODE_ENV="):
+                  lines.append("NODE_ENV=production")
+              elif line.startswith("ALLOWED_ORIGIN="):
+                  lines.append(f"ALLOWED_ORIGIN={origin},http://localhost")
+              else:
+                  lines.append(line)
+          path.write_text("\n".join(lines) + "\n")
+          PY
+          fi
+          docker_cmd compose up -d --build
+          docker_cmd compose ps
+          curl -fsS http://127.0.0.1/healthz
+          echo
+          curl -fsS http://127.0.0.1/health
+          echo
+          REMOTE
