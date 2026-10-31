@@ -7,7 +7,7 @@ import type { BookingDraft } from "../../lib/types";
 import { roomCards, scheduleCards, useApiList, useCatalog, type ScheduleSummary } from "../../lib/catalog";
 import { PickerCards } from "../../components/smart/picker-cards";
 import { canOpen } from "../../lib/access";
-import { ArrowIcon, CalendarIcon, CheckIcon, SparkIcon, WrenchIcon } from "../../components/ui/icons";
+import { ArrowIcon, CalendarIcon, CheckIcon, MessageIcon, VenueIcon, WrenchIcon } from "../../components/ui/icons";
 
 type LiveItem = { session_id: string; day: string; start_period: number; room_id: string; courseId: string; kind: string; duration: number };
 
@@ -123,7 +123,7 @@ export default function Home() {
       <section className="attention-grid">
         <article className="attention hero-card"><span className="card-icon coral"><CalendarIcon /></span><div><small>TIMETABLE</small><strong>{overview ? `${overview.counts.sessions} sessions` : "No dataset yet"}</strong><p>{overview?.latestSchedule ? `${overview.latestSchedule.hardViolations} hard conflicts · ${overview.roomUtilization}% room utilisation` : "Import a dataset, then generate the week."}</p></div><Link href="/schedule">Open scheduler <ArrowIcon /></Link></article>
         {(!role || canOpen(role, "/repair")) && <article className="attention"><span className="card-icon violet"><WrenchIcon /></span><div><small>CHANGES</small><strong>Repair safely</strong><p>Upload disruptions and review every move.</p></div><Link href="/repair">Plan a repair <ArrowIcon /></Link></article>}
-        <article className="attention"><span className="card-icon mint"><SparkIcon /></span><div><small>SPECTRA WEEK</small><strong>{overview ? `${overview.counts.bookingRequests} requests` : "No requests yet"}</strong><p>{overview?.pendingApprovals ?? 0} validated proposals await approval.</p></div><Link href="/bookings">Review requests <ArrowIcon /></Link></article>
+        <article className="attention"><span className="card-icon mint"><VenueIcon /></span><div><small>SPECTRA WEEK</small><strong>{overview ? `${overview.counts.bookingRequests} requests` : "No requests yet"}</strong><p>{overview?.pendingApprovals ?? 0} validated proposals await approval.</p></div><Link href="/bookings">Review requests <ArrowIcon /></Link></article>
       </section>
       <section className="dashboard-grid">
         <article className="panel timetable-panel">
@@ -138,7 +138,7 @@ export default function Home() {
           )}
         </article>
         <article className="panel assistant-panel">
-          <div className="assistant-title"><span className="card-icon coral"><SparkIcon /></span><div><p className="eyebrow">REQUEST ASSISTANT</p><h2>Book a venue naturally</h2></div></div>
+          <div className="assistant-title"><span className="card-icon coral"><MessageIcon /></span><div><p className="eyebrow">REQUEST ASSISTANT</p><h2>Book a venue naturally</h2></div></div>
           <p>Tell us what you need. AI fills the form; deterministic rules decide availability.</p>
           <form onSubmit={parse}>
             <label>Your request<textarea value={request} onChange={(event) => setRequest(event.target.value)} /></label>

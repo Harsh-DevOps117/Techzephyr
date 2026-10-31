@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Reveal } from "../components/motion/reveal";
+import { CloseIcon, MenuIcon } from "../components/ui/icons";
 
 const rows: { text: string; kind?: "lab" | "exam" }[][] = [
   [{ text: "MA101" }, { text: "CS201" }, { text: "PH101" }, { text: "" }, { text: "HS101" }],
@@ -16,6 +17,7 @@ const marks = ["Validator", "Two admins", "Card pickers", "Hinglish drafts", "Ze
 
 export default function Landing() {
   const [signedIn, setSignedIn] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     setSignedIn(Boolean(localStorage.getItem("tz_access_token")));
   }, []);
@@ -27,14 +29,15 @@ export default function Landing() {
         <span>A different admin publishes the week. The creator cannot approve their own proposal.</span>
         <a href="#roles">Learn more</a>
       </div>
-      <header className="site-nav">
+      <header className={`site-nav${menuOpen ? " menu-open" : ""}`}>
         <Link href="/" className="site-mark">TechZephyr</Link>
         <nav>
-          <a href="#product">Product</a>
-          <a href="#week">The week</a>
-          <a href="#roles">Roles</a>
+          <a href="#product" onClick={() => setMenuOpen(false)}>Product</a>
+          <a href="#week" onClick={() => setMenuOpen(false)}>The week</a>
+          <a href="#roles" onClick={() => setMenuOpen(false)}>Roles</a>
         </nav>
         <div className="site-nav-actions">
+          <button type="button" className="site-menu" aria-expanded={menuOpen} aria-label={menuOpen ? "Hide menu" : "Open menu"} onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <CloseIcon /> : <MenuIcon />}</button>
           <Link href="/login" className="site-text">Log in</Link>
           <Link href={enter} className="site-btn">Open workspace</Link>
         </div>
