@@ -2,6 +2,7 @@ FROM node:latest AS build
 WORKDIR /app
 ARG API_INTERNAL_URL=http://api:3000
 ENV API_INTERNAL_URL=$API_INTERNAL_URL
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
