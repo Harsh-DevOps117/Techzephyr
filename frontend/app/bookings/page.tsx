@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, uuidv7 } from "../../lib/api";
 import { scheduleCards, useApiList, type ScheduleSummary } from "../../lib/catalog";
 import { PickerCards } from "../../components/smart/picker-cards";
-import { SparkIcon } from "../../components/ui/icons";
+import { VenueIcon } from "../../components/ui/icons";
 import { Feedback, StepHeader } from "../../components/ui/feedback";
 
 const priority = ["Exams", "Regular classes", "Institute events", "Guest lectures", "Department events", "Club events"];
@@ -69,7 +69,7 @@ export default function Bookings() {
       <StepHeader eyebrow="SPECTRA · VENUE REQUESTS" title="Decide bookings by rule, not guesswork" copy="Approve, reject or offer an alternative for every request, with a human-readable reason." />
       <section className="form-layout">
         <div className="form-card">
-          <div className="section-title"><span className="card-icon mint"><SparkIcon /></span><div><h2>Run dataset decisions</h2><p>Choose a validated timetable so classes remain protected.</p></div></div>
+          <div className="section-title"><span className="card-icon mint"><VenueIcon /></span><div><h2>Run dataset decisions</h2><p>Choose a validated timetable so classes remain protected.</p></div></div>
           <PickerCards
             label="Timetable"
             hint="Spectra requests from the CIT dataset are decided against this timetable"
