@@ -11,6 +11,8 @@ import {
   AiUnavailableError,
   parseBookingRequest,
 } from "../../application/ai/booking-request-parser.js";
+import { bookingDraftSchema } from "../../domain/booking/booking-draft.js";
+import { parseScheduleChange } from "../../application/ai/schedule-change-parser.js";
 import { authenticate, login } from "../../application/auth/auth-service.js";
 import {
   IdempotencyKeyReuseError,
@@ -19,6 +21,7 @@ import {
 } from "../../application/idempotency/service.js";
 import { createJob, publishOutbox } from "../../application/jobs/service.js";
 import type { Role } from "../../domain/shared/types.js";
+import { decideBookings, type CitDataset, type Placement } from "../../application/scheduling/solver.js";
 import {
   getCachedJson,
   setCachedJson,
@@ -154,6 +157,24 @@ const aiBookingRequestSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+});
+const manualEventSchema = z.object({
+  scheduleVersionId: z.string().uuid(),
+  title: z.string().trim().min(3).max(160),
+  day: z.enum(["MON", "TUE", "WED", "THU", "FRI"]),
+  startPeriod: z.number().int().min(1).max(13),
+  endPeriod: z.number().int().min(1).max(13),
+  roomId: z.string().min(1).max(64),
+  attendance: z.number().int().positive().max(10000),
+  needs: z.array(z.string().min(1).max(64)).max(20).default([]),
+  mandatoryGroups: z.array(z.string().min(1).max(64)).max(30).default([]),
+  reason: z.string().trim().min(3).max(500),
+}).refine((value) => value.endPeriod >= value.startPeriod, { message: "End period must be at or after the start period" });
+const bookingSubmissionSchema = z.object({
+  scheduleVersionId: z.string().uuid(),
+  title: z.string().trim().min(3).max(160),
+  requestedCategory: z.enum(["institute_event", "guest_lecture", "department_event", "club_event"]),
+  draft: bookingDraftSchema,
 });
 
 export function createApp() {
@@ -310,7 +331,7 @@ export function createApp() {
 
   app.post(
     "/api/v1/schedules/repair",
-    requireRole("admin"),
+    requireRole("admin", "department_coordinator", "faculty"),
     asyncRoute(async (req, res) => {
       const input = repairSchema.parse(req.body);
       await idempotentCommand(
@@ -406,6 +427,75 @@ export function createApp() {
   );
 
   app.post(
+    "/api/v1/ai/schedule-change-drafts",
+    rateLimit("ai-change", 10, 10 / 60),
+    requireRole("admin", "department_coordinator", "faculty"),
+    asyncRoute(async (req, res) => {
+      const input = aiBookingRequestSchema.parse(req.body);
+      const draft = await parseScheduleChange(input.text);
+      res.json({ draft, validation: "schema_validated_only", requestId: req.requestId });
+    }),
+  );
+
+  app.post(
+    "/api/v1/booking-requests",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const input = bookingSubmissionSchema.parse(req.body);
+      if (input.draft.attendance === null || input.draft.duration_periods === null || input.draft.windows.length === 0)
+        throw new ApiError(400, "incomplete_booking", input.draft.follow_up ?? "Attendance, duration and at least one time window are required");
+      const found = await query<{ payload: CitDataset; objective: { export?: { sessions: Placement[] } } }>("SELECT d.payload,s.objective FROM schedule_version s JOIN dataset_version d ON d.id=s.dataset_version_id WHERE s.id=$1 AND s.status='approved'", [input.scheduleVersionId]);
+      if (!found.rowCount) throw new ApiError(409, "approved_schedule_required", "Submit requests against an approved schedule");
+      const id = `USR-${uuidv7()}`;
+      const request = { id, submitted_at: new Date().toISOString(), requester: req.actor!.id, role: req.actor!.role, requested_category: input.requestedCategory, title: input.title, attendance: input.draft.attendance, duration_periods: input.draft.duration_periods, windows: input.draft.windows, room_types: input.draft.room_types, needs: input.draft.needs, requested_room: input.draft.requested_room, mandatory_for_groups: input.draft.mandatory_for_groups };
+      const data = structuredClone(found.rows[0].payload);
+      data.booking_requests = [...(data.booking_requests ?? []), request];
+      const proposed = decideBookings(data, found.rows[0].objective.export?.sessions ?? []).find((decision) => decision.request_id === id)!;
+      const databaseId = uuidv7();
+      await query("INSERT INTO venue_request(id,schedule_version_id,title,requested_category,draft,proposed_decision,status,requested_by) VALUES($1,$2,$3,$4,$5,$6,'pending_review',$7)", [databaseId, input.scheduleVersionId, input.title, input.requestedCategory, input.draft, proposed, req.actor!.id]);
+      res.status(201).json({ id: databaseId, status: "pending_review", proposedDecision: proposed, roleCategoryApplied: req.actor!.role, deterministic: true });
+    }),
+  );
+
+  app.get(
+    "/api/v1/booking-requests",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const admin = req.actor!.role === "admin" || req.actor!.role === "department_coordinator";
+      const found = await query("SELECT id,schedule_version_id,title,requested_category,proposed_decision,status,requested_by,reviewed_by,reviewed_at,created_at FROM venue_request WHERE $1::boolean OR requested_by=$2 ORDER BY created_at DESC", [admin, req.actor!.id]);
+      res.json({ items: found.rows });
+    }),
+  );
+
+  app.post(
+    "/api/v1/booking-requests/:id/review",
+    requireRole("admin", "department_coordinator"),
+    asyncRoute(async (req, res) => {
+      const id = actorIdSchema.parse(req.params.id);
+      const found = await query<{ requested_by: string; proposed_decision: { status: "approved" | "rejected" | "alternative_offered" } }>("SELECT requested_by,proposed_decision FROM venue_request WHERE id=$1 AND status='pending_review'", [id]);
+      if (!found.rowCount) throw new ApiError(404, "request_not_found", "Pending venue request does not exist");
+      if (found.rows[0].requested_by === req.actor!.id) throw new ApiError(403, "self_approval_forbidden", "You cannot review your own venue request");
+      const status = found.rows[0].proposed_decision.status;
+      await query("UPDATE venue_request SET status=$2,reviewed_by=$3,reviewed_at=now() WHERE id=$1", [id, status, req.actor!.id]);
+      res.json({ id, status, decision: found.rows[0].proposed_decision });
+    }),
+  );
+
+  app.post(
+    "/api/v1/booking-requests/:id/cancel",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const id = actorIdSchema.parse(req.params.id);
+      const found = await query<{ requested_by: string; proposed_decision: Record<string, unknown> }>("SELECT requested_by,proposed_decision FROM venue_request WHERE id=$1", [id]);
+      if (!found.rowCount) throw new ApiError(404, "request_not_found", "Venue request does not exist");
+      if (req.actor!.role !== "admin" && found.rows[0].requested_by !== req.actor!.id) throw new ApiError(403, "forbidden", "Only the requester or an Admin can cancel this request");
+      const decision = { ...found.rows[0].proposed_decision, status: "rejected", reason: "Cancelled by the requester." };
+      await query("UPDATE venue_request SET status='rejected',proposed_decision=$2 WHERE id=$1", [id, decision]);
+      res.json({ id, status: "rejected", decision });
+    }),
+  );
+
+  app.post(
     "/api/v1/schedules/:id/approve",
     requireRole("admin"),
     asyncRoute(async (req, res) => {
@@ -463,6 +553,160 @@ export function createApp() {
           };
         },
       );
+    }),
+  );
+
+  app.get(
+    "/api/v1/dashboard",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (_req, res) => {
+      const [dataset, schedule, pending, jobs] = await Promise.all([
+        query<{ payload: CitDataset; id: string }>("SELECT id, payload FROM dataset_version ORDER BY created_at DESC LIMIT 1"),
+        query<{ id: string; status: string; validation_report: Record<string, unknown> | null; objective: { export?: { sessions?: Placement[]; exams?: unknown[]; fest_week?: { bookings?: Array<{ status: string }> } } } }>("SELECT id,status,validation_report,objective FROM schedule_version ORDER BY created_at DESC LIMIT 1"),
+        query<{ count: string }>("SELECT count(*)::text AS count FROM schedule_version WHERE status='pending_admin_approval'"),
+        query<{ count: string }>("SELECT count(*)::text AS count FROM job WHERE status IN ('queued','running')"),
+      ]);
+      const data = dataset.rows[0]?.payload;
+      const current = schedule.rows[0];
+      const exported = current?.objective?.export;
+      const approvedBookings = exported?.fest_week?.bookings?.filter((b) => b.status === "approved").length ?? 0;
+      const sessionById = new Map(data?.sessions.map((session) => [session.id, session]) ?? []);
+      const scheduledRoomHours = exported?.sessions?.reduce((sum, placement) => sum + (sessionById.get(placement.session_id)?.duration ?? 0), 0) ?? 0;
+      const roomUtilization = data?.rooms.length ? Math.round((scheduledRoomHours / (data.rooms.length * 45)) * 100) : 0;
+      res.json({
+        datasetVersionId: dataset.rows[0]?.id ?? null,
+        datasetId: data?.dataset_id ?? null,
+        counts: { rooms: data?.rooms.length ?? 0, faculty: data?.faculty.length ?? 0, sessions: data?.sessions.length ?? 0, exams: data?.exams?.length ?? 0, bookingRequests: data?.booking_requests?.length ?? 0 }, roomUtilization,
+        latestSchedule: current ? { id: current.id, status: current.status, hardViolations: Number(current.validation_report?.hard_violation_count ?? 0), softPenalty: Number(current.validation_report?.soft_total ?? 0), approvedBookings } : null,
+        pendingApprovals: Number(pending.rows[0]?.count ?? 0),
+        activeJobs: Number(jobs.rows[0]?.count ?? 0),
+      });
+    }),
+  );
+
+  app.get(
+    "/api/v1/datasets",
+    requireRole("admin"),
+    asyncRoute(async (_req, res) => {
+      const found = await query("SELECT id,dataset_id,source_name,content_hash,created_at FROM dataset_version ORDER BY created_at DESC");
+      res.json({ items: found.rows });
+    }),
+  );
+
+  app.get(
+    "/api/v1/schedules",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (_req, res) => {
+      const found = await query("SELECT id,dataset_version_id,baseline_schedule_id,status,validation_report,created_by,approved_by,approved_at,created_at,updated_at FROM schedule_version ORDER BY created_at DESC LIMIT 50");
+      res.json({ items: found.rows });
+    }),
+  );
+
+  app.get(
+    "/api/v1/approvals",
+    requireRole("admin"),
+    asyncRoute(async (_req, res) => {
+      const found = await query("SELECT s.id,s.baseline_schedule_id,s.validation_report,s.created_at,u.display_name AS created_by_name FROM schedule_version s LEFT JOIN app_user u ON u.id=s.created_by WHERE s.status='pending_admin_approval' ORDER BY s.created_at");
+      res.json({ items: found.rows });
+    }),
+  );
+
+  app.get(
+    "/api/v1/schedules/:id",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const id = actorIdSchema.parse(req.params.id);
+      const found = await query("SELECT id,dataset_version_id,baseline_schedule_id,status,validation_report,objective,created_by,approved_by,approved_at,created_at,updated_at FROM schedule_version WHERE id=$1", [id]);
+      if (!found.rowCount) throw new ApiError(404, "schedule_not_found", "Schedule version does not exist");
+      res.json(found.rows[0]);
+    }),
+  );
+
+  app.get(
+    "/api/v1/schedules/:id/export",
+    requireRole("admin", "department_coordinator"),
+    asyncRoute(async (req, res) => {
+      const id = actorIdSchema.parse(req.params.id);
+      const found = await query<{ objective: { export?: unknown } }>("SELECT objective FROM schedule_version WHERE id=$1", [id]);
+      const exported = found.rows[0]?.objective?.export;
+      if (!exported) throw new ApiError(409, "export_not_ready", "This schedule has not finished generating");
+      res.setHeader("content-disposition", `attachment; filename="schedule-${id}.json"`);
+      res.json(exported);
+    }),
+  );
+
+  app.get(
+    "/api/v1/schedules/:id/timetable",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const id = actorIdSchema.parse(req.params.id);
+      const found = await query<{ payload: CitDataset; objective: { export?: { sessions: Placement[] } } }>("SELECT d.payload,s.objective FROM schedule_version s JOIN dataset_version d ON d.id=s.dataset_version_id WHERE s.id=$1", [id]);
+      if (!found.rowCount) throw new ApiError(404, "schedule_not_found", "Schedule version does not exist");
+      const placements = found.rows[0].objective.export?.sessions ?? [];
+      const sessions = new Map(found.rows[0].payload.sessions.map((s) => [s.id, s]));
+      const group = typeof req.query.group === "string" ? req.query.group : null;
+      const faculty = typeof req.query.faculty === "string" ? req.query.faculty : null;
+      const room = typeof req.query.room === "string" ? req.query.room : null;
+      const items = placements.flatMap((placement) => {
+        const session = sessions.get(placement.session_id);
+        if (!session || (group && !session.groups.includes(group)) || (faculty && session.faculty_id !== faculty) || (room && placement.room_id !== room)) return [];
+        return [{ ...placement, courseId: session.course_id, kind: session.kind, groups: session.groups, facultyId: session.faculty_id, duration: session.duration, size: session.size }];
+      });
+      res.json({ scheduleVersionId: id, filters: { group, faculty, room }, items });
+    }),
+  );
+
+  app.get(
+    "/api/v1/schedules/:id/explanations/:sessionId",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const id = actorIdSchema.parse(req.params.id);
+      const found = await query<{ payload: CitDataset; objective: { export?: { sessions: Placement[] } } }>("SELECT d.payload,s.objective FROM schedule_version s JOIN dataset_version d ON d.id=s.dataset_version_id WHERE s.id=$1", [id]);
+      const session = found.rows[0]?.payload.sessions.find((s) => s.id === req.params.sessionId);
+      const placement = found.rows[0]?.objective.export?.sessions.find((p) => p.session_id === req.params.sessionId);
+      if (!session || !placement) throw new ApiError(404, "session_not_found", "Scheduled session does not exist");
+      const room = found.rows[0].payload.rooms.find((r) => r.id === placement.room_id)!;
+      res.json({ sessionId: session.id, placement, reasons: [`${room.name} has capacity ${room.capacity} for ${session.size} students.`, `${room.type.replaceAll("_", " ")} matches the session requirement.`, `The slot is free for ${session.faculty_id}, ${session.groups.join(", ")} and the room.`, session.needs_accessible ? "The room is accessible as required." : "No accessibility restriction was required."], deterministic: true });
+    }),
+  );
+
+  app.post(
+    "/api/v1/manual-events",
+    requireRole("admin", "department_coordinator"),
+    asyncRoute(async (req, res) => {
+      const input = manualEventSchema.parse(req.body);
+      const found = await query<{ status: string; payload: CitDataset; objective: { export?: { sessions: Placement[] } } }>("SELECT s.status,d.payload,s.objective FROM schedule_version s JOIN dataset_version d ON d.id=s.dataset_version_id WHERE s.id=$1", [input.scheduleVersionId]);
+      if (!found.rowCount || found.rows[0].status !== "approved") throw new ApiError(409, "approved_schedule_required", "Manual events require an approved schedule");
+      const data = found.rows[0].payload, room = data.rooms.find((r) => r.id === input.roomId);
+      if (!room || !room.allowed_uses.includes("event") || room.capacity < input.attendance) throw new ApiError(409, "room_not_suitable", "Room type, use or capacity does not fit this event");
+      const features = new Set([...room.features, ...(room.accessible ? ["accessible"] : [])]);
+      if (input.needs.some((need) => !features.has(need))) throw new ApiError(409, "room_features_missing", "The room lacks one or more required features");
+      const occupied = new Set(Array.from({ length: input.endPeriod - input.startPeriod + 1 }, (_, index) => input.startPeriod + index));
+      if ((data.room_unavailability ?? []).some((u) => u.room_id === room.id && u.day === input.day && u.periods.some((p) => occupied.has(p)))) throw new ApiError(409, "room_unavailable", "The room is unavailable during this event");
+      const sessions = new Map(data.sessions.map((s) => [s.id, s]));
+      for (const placement of found.rows[0].objective.export?.sessions ?? []) {
+        const session = sessions.get(placement.session_id)!;
+        const overlap = placement.day === input.day && Array.from({ length: session.duration }, (_, index) => placement.start_period + index).some((p) => occupied.has(p));
+        if (overlap && (placement.room_id === input.roomId || session.groups.some((g) => input.mandatoryGroups.includes(g)))) throw new ApiError(409, "event_conflict", `Event conflicts with ${session.id}`);
+      }
+      const clashes = await query("SELECT id FROM manual_event WHERE schedule_version_id=$1 AND day=$2 AND room_id=$3 AND start_period <= $5 AND end_period >= $4", [input.scheduleVersionId, input.day, input.roomId, input.startPeriod, input.endPeriod]);
+      if (clashes.rowCount) throw new ApiError(409, "event_conflict", "The room already has a manually scheduled event");
+      const bookingClashes = await query("SELECT request_id FROM booking_decision WHERE schedule_version_id=$1 AND day=$2 AND room_id=$3 AND status<>'rejected' AND start_period <= $5 AND end_period >= $4", [input.scheduleVersionId, input.day, input.roomId, input.startPeriod, input.endPeriod]);
+      if (bookingClashes.rowCount) throw new ApiError(409, "event_conflict", `The room is held by booking ${bookingClashes.rows[0].request_id}`);
+      const id = uuidv7();
+      await query("INSERT INTO manual_event(id,schedule_version_id,title,day,start_period,end_period,room_id,mandatory_groups,reason,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10)", [id, input.scheduleVersionId, input.title, input.day, input.startPeriod, input.endPeriod, input.roomId, JSON.stringify(input.mandatoryGroups), input.reason, req.actor!.id]);
+      res.status(201).json({ id, status: "scheduled", ...input, validation: "hard_constraints_passed" });
+    }),
+  );
+
+  app.post(
+    "/api/v1/demo/reset",
+    requireRole("admin"),
+    asyncRoute(async (req, res) => {
+      await transaction(async (client) => {
+        for (const table of ["venue_request", "manual_event", "booking_decision", "schedule_session", "audit_log", "idempotency_record", "outbox_event", "job", "schedule_version", "dataset_version"]) await client.query(`DELETE FROM ${table}`);
+      });
+      res.json({ status: "reset", message: "Demo datasets, schedules, jobs and decisions were cleared", requestId: req.requestId });
     }),
   );
 

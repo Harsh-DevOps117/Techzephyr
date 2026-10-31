@@ -11,6 +11,7 @@
     "worker": "tsx src/interfaces/workers/worker.ts",
     "worker:start": "node dist/interfaces/workers/worker.js",
     "db:migrate": "tsx src/infrastructure/database/migrate.ts",
+    "exports:generate": "tsx src/scripts/generate-exports.ts",
     "check": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

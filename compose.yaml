@@ -60,7 +60,7 @@ services:
       VALIDATOR_PATH: /app/validator.py
       PYTHON_BIN: python3
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
     ports:
       - "3000:3000"
     depends_on:
@@ -84,7 +84,7 @@ services:
       VALIDATOR_PATH: /app/validator.py
       PYTHON_BIN: python3
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
     depends_on:
       api:
         condition: service_started

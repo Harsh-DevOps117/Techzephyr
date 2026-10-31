@@ -1,4 +1,0 @@
-"use client";
-import { FormEvent, useState } from "react";
-import { api, uuidv7 } from "../../lib/api";
-export function ApiAction({title,path,initial,fields}:{title:string;path:string;initial:string;fields:string[]}){const [body,setBody]=useState(initial),[result,setResult]=useState("");async function submit(e:FormEvent){e.preventDefault();let parsed;try{parsed=JSON.parse(body)}catch{setResult("Enter valid JSON.");return}const r=await api<unknown>(path,{method:"POST",headers:{"idempotency-key":uuidv7()},body:JSON.stringify(parsed)});setResult(JSON.stringify(r.data??{error:r.error},null,2))}return <main className="route"><p className="eyebrow">BACKEND WORKFLOW</p><h1>{title}</h1><p>Required fields: {fields.join(", ")}</p><form onSubmit={submit}><textarea value={body} onChange={e=>setBody(e.target.value)} aria-label={`${title} JSON`}/><button className="primary">Submit <span>→</span></button></form>{result&&<pre>{result}</pre>}</main>}

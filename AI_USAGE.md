@@ -10,4 +10,4 @@ The AI is not allowed to approve or reject requests, determine category priority
 
 ## Development AI
 
-Codex was used to help scaffold and document this backend. Product behavior remains reviewable in this repository and subject to the official validator.
+Codex was used to build and review the TypeScript API, deterministic scheduling engine, worker integration, tests, documentation and Next.js interface. Product behavior remains reviewable in this repository and subject to the official validator.

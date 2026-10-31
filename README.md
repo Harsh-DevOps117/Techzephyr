@@ -1,4 +1,36 @@
-# Crunch Week starter pack
+# TechZephyr — CIT Campus Scheduling
+
+TechZephyr is a TypeScript campus-operations platform for generating CIT’s weekly timetable and exams, deciding Spectra venue requests, repairing disruptions with minimal movement, and applying changes through role-based approval. Schedule validity is deterministic and every generated export is checked with the supplied official validator.
+
+```mermaid
+flowchart LR
+  PWA[Next.js PWA] --> API[Express API]
+  API --> PG[(PostgreSQL)]
+  API --> Q[RabbitMQ]
+  Q --> W[TypeScript scheduling worker]
+  W --> V[Official validator.py]
+  W --> PG
+  API --> R[(Redis)]
+  API -. optional draft extraction .-> G[Groq]
+```
+
+Tech stack: Next.js, React, TypeScript, Express, PostgreSQL, RabbitMQ, Redis, Zod and the Python standard-library validator.
+
+## Demo accounts
+
+All accounts use password `TechZephyr!2026`.
+
+| Role | Email |
+| --- | --- |
+| Admin | `admin@cit.local` |
+| Reviewing Admin | `reviewer@cit.local` |
+| Department coordinator | `coordinator.cse@cit.local` |
+| Faculty | `faculty.cse@cit.local` |
+| Club representative | `club@cit.local` |
+
+Two Admin accounts are provided because nobody may approve their own proposal. The Data manager screen includes the required demo-reset action.
+
+## Crunch Week starter pack
 
 Everything you need to build against the Chilika Institute of Technology (CIT) dataset. Read the problem statement first; this file explains the data and the export format.
 
@@ -204,7 +236,7 @@ The OpenAPI source at [docs/openapi.yaml](docs/openapi.yaml) is the API contract
 - Write endpoints require `Idempotency-Key` as a UUIDv7. Retrying the same request replays its original response; reusing a key with a different payload returns `409`.
 - Development authentication uses `x-user-id` and `x-user-role` headers, which must match a record in `app_user`. Replace this adapter with the deployed identity provider before production.
 - Work is written transactionally to the database outbox, then published to the durable RabbitMQ queue. Worker delivery is at least once, so database operations are idempotent.
-- The worker uses the supplied `validator.py` for validation jobs. Timetable solving and booking optimization are intentionally separate worker adapters: they must persist a candidate, pass the validator, and produce a pending Admin approval proposal before any schedule is published.
+- The worker runs the deterministic timetable, exam, repair and priority-aware booking engine in `src/application/scheduling/solver.ts`, persists the complete candidate, then runs the supplied `validator.py`. A zero-violation result becomes a pending Admin approval proposal; failures never publish.
 
 ### Backend structure
 
@@ -230,4 +262,11 @@ Commit both of these to your repo before the deadline:
 - `exports/schedule_after.json`: the timetable after applying `examples/sample_disruption.json` in your app, starting from that `schedule.json`.
 
 Both must be produced by the app. Files made or edited by hand lead to disqualification.
-# Techzephyr
+
+Regenerate them with `npm run exports:generate`; both commands are also checked by the official validator during release verification.
+
+## Known limitations
+
+- Natural-language draft extraction requires a configured Groq key; all deterministic scheduling, manual event entry and dataset workflows continue without it.
+- The included optimiser prioritises a fast zero-hard-violation solution and baseline stability. Its soft score is deterministic but is not guaranteed to be the global optimum.
+- Deployment-specific identity, TLS and secret management must replace the local demo credentials before production use.

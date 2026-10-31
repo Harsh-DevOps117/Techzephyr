@@ -51,7 +51,7 @@ export async function completeIdempotentCommand(
 ): Promise<void> {
   await client.query(
     `UPDATE idempotency_record
-     SET status_code = $6, response_body = $7, resource_id = $8, completed_at = now()
+     SET status_code = $5, response_body = $6, resource_id = $7, completed_at = now()
      WHERE actor_id = $1 AND method = $2 AND route = $3 AND idempotency_key = $4`,
     [actorId, method, route, key, statusCode, body, resourceId ?? null]
   );

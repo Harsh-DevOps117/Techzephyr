@@ -146,6 +146,11 @@ paths:
                 type: object
                 required: [draft, validation, requestId]
         '503': { description: AI provider is unavailable; use the manual form. }
+  /api/v1/ai/schedule-change-drafts:
+    post:
+      tags: [AI]
+      summary: Turn a faculty schedule-change prompt into an editable disruption draft
+      responses: { '200': { description: Schema-validated draft that still requires deterministic repair and approval }, '503': { description: AI unavailable; upload the manual change format } }
   /api/v1/jobs/{id}:
     get:
       tags: [Jobs]
@@ -158,6 +163,109 @@ paths:
         - $ref: '#/components/parameters/ActorId'
         - $ref: '#/components/parameters/ActorRole'
       responses: { '200': { description: Job details } }
+  /api/v1/booking-requests:
+    get:
+      tags: [Bookings]
+      summary: List submitted natural-language venue requests
+      responses: { '200': { description: Requests visible to the current role } }
+    post:
+      tags: [Bookings]
+      summary: Submit an edited AI or manual draft for deterministic evaluation
+      responses: { '201': { description: Pending review with an approved, rejected or alternative proposal } }
+  /api/v1/booking-requests/{id}/review:
+    post:
+      tags: [Bookings]
+      summary: Apply a deterministic venue decision after authorized review
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Reviewed decision applied }, '403': { description: Self-review forbidden } }
+  /api/v1/booking-requests/{id}/cancel:
+    post:
+      tags: [Bookings]
+      summary: Cancel a request as its requester or an Admin
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Request cancelled with an explanatory decision }, '403': { description: Not the requester } }
+  /api/v1/dashboard:
+    get:
+      tags: [Schedules]
+      summary: Read current campus scheduling metrics
+      responses: { '200': { description: Dataset, schedule, approval and queue metrics } }
+  /api/v1/datasets:
+    get:
+      tags: [Datasets]
+      summary: List imported immutable dataset versions
+      responses: { '200': { description: Dataset versions } }
+  /api/v1/schedules:
+    get:
+      tags: [Schedules]
+      summary: List generated and repaired schedule versions
+      responses: { '200': { description: Schedule versions and validation summaries } }
+  /api/v1/approvals:
+    get:
+      tags: [Schedules]
+      summary: List zero-conflict proposals awaiting Admin approval
+      responses: { '200': { description: Pending approval queue } }
+  /api/v1/schedules/{id}:
+    get:
+      tags: [Schedules]
+      summary: Read a schedule, validation report and generated export
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Schedule detail }, '404': { description: Not found } }
+  /api/v1/schedules/{id}/export:
+    get:
+      tags: [Schedules]
+      summary: Download schedule.json for a completed version
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Official schedule export }, '409': { description: Export not ready } }
+  /api/v1/schedules/{id}/timetable:
+    get:
+      tags: [Schedules]
+      summary: View a timetable filtered by group, faculty or room
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: group, in: query, schema: { type: string } }
+        - { name: faculty, in: query, schema: { type: string } }
+        - { name: room, in: query, schema: { type: string } }
+      responses: { '200': { description: Readable timetable entries } }
+  /api/v1/schedules/{id}/explanations/{sessionId}:
+    get:
+      tags: [Schedules]
+      summary: Explain a deterministic session placement
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: sessionId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Placement reasons and matched constraints } }
+  /api/v1/manual-events:
+    post:
+      tags: [Bookings]
+      summary: Validate and schedule an authorized manual event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduleVersionId, title, day, startPeriod, endPeriod, roomId, attendance, reason]
+              properties:
+                scheduleVersionId: { type: string, format: uuid }
+                title: { type: string }
+                day: { type: string, enum: [MON, TUE, WED, THU, FRI] }
+                startPeriod: { type: integer, minimum: 1, maximum: 13 }
+                endPeriod: { type: integer, minimum: 1, maximum: 13 }
+                roomId: { type: string }
+                attendance: { type: integer, minimum: 1 }
+                needs: { type: array, items: { type: string } }
+                mandatoryGroups: { type: array, items: { type: string } }
+                reason: { type: string }
+      responses: { '201': { description: Event passed hard constraints }, '409': { description: Event conflicts or room is unsuitable } }
+  /api/v1/demo/reset:
+    post:
+      tags: [Datasets]
+      summary: Reset generated demo datasets, schedules, jobs and decisions
+      responses: { '200': { description: Demo data reset } }
 components:
   securitySchemes:
     BearerAuth:
