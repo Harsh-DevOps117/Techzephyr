@@ -61,6 +61,10 @@ services:
       PYTHON_BIN: python3
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TEAM_NAME: ${TEAM_NAME:-TechZephyr}
+      ALLOW_HEADER_AUTH: ${ALLOW_HEADER_AUTH:-false}
     ports:
       - "3000:3000"
     depends_on:
@@ -85,6 +89,9 @@ services:
       PYTHON_BIN: python3
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TEAM_NAME: ${TEAM_NAME:-TechZephyr}
     depends_on:
       api:
         condition: service_started

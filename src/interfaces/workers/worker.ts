@@ -5,6 +5,7 @@ import { v7 as uuidv7 } from "uuid";
 import { buildSchedule, decideBookings, type CitDataset, type Disruption, type Placement } from "../../application/scheduling/solver.js";
 import { getChannel, QUEUE_NAME, closeQueue } from "../../infrastructure/messaging/rabbitmq.js";
 import { config } from "../../infrastructure/config/env.js";
+import { logger } from "../../infrastructure/logging/logger.js";
 import { pool, transaction } from "../../infrastructure/database/postgres.js";
 import type { JobEnvelope } from "../../domain/shared/types.js";
 import { invalidateCache } from "../../infrastructure/cache/redis-cache.js";
@@ -52,6 +53,7 @@ async function runValidator(scheduleVersionId: string): Promise<Record<string,un
 async function solve(scheduleVersionId:string){
   const context=await scheduleContext(scheduleVersionId);
   const schedule=buildSchedule(context.payload,{baseline:context.baseline,disruption:context.disruption??undefined});
+  schedule.team=config.TEAM_NAME;
   await persistSchedule(scheduleVersionId,schedule);
   const validation=await runValidator(scheduleVersionId);const hard=Number(validation.hard_violation_count??1);
   await pool.query(`UPDATE schedule_version SET validation_report=$2,status=$3,updated_at=now() WHERE id=$1`,[scheduleVersionId,validation,hard===0?"pending_admin_approval":"failed"]);
@@ -67,6 +69,6 @@ async function processJob(job:JobEnvelope):Promise<unknown>{
   return runValidator(scheduleVersionId);
 }
 
-async function main(){const channel=await getChannel();await channel.prefetch(1);await channel.consume(QUEUE_NAME,async(message)=>{if(!message)return;let job:JobEnvelope|undefined;try{job=JSON.parse(message.content.toString()) as JobEnvelope;await pool.query("UPDATE job SET status='running',started_at=now(),attempt_count=attempt_count+1 WHERE id=$1",[job.id]);const result=await processJob(job);await pool.query("UPDATE job SET status='succeeded',result=$2,completed_at=now() WHERE id=$1",[job.id,result]);channel.ack(message);await invalidateCache(`job:${job.id}`,`schedule:${String(job.payload.scheduleVersionId??"")}`);}catch(error){const detail=error instanceof Error?error.message:"Unknown worker error";if(job)await pool.query("UPDATE job SET status='failed',error=$2,completed_at=now() WHERE id=$1",[job.id,detail]);if(job)await invalidateCache(`job:${job.id}`);console.error({jobId:job?.id,error:detail});channel.ack(message);}},{noAck:false});console.log("Worker is consuming jobs");}
+async function main(){const channel=await getChannel();await channel.prefetch(1);await channel.consume(QUEUE_NAME,async(message)=>{if(!message)return;let job:JobEnvelope|undefined;try{job=JSON.parse(message.content.toString()) as JobEnvelope;await pool.query("UPDATE job SET status='running',started_at=now(),attempt_count=attempt_count+1 WHERE id=$1",[job.id]);const result=await processJob(job);await pool.query("UPDATE job SET status='succeeded',result=$2,completed_at=now() WHERE id=$1",[job.id,result]);channel.ack(message);await invalidateCache(`job:${job.id}`,`schedule:${String(job.payload.scheduleVersionId??"")}`);}catch(error){const detail=error instanceof Error?error.message:"Unknown worker error";if(job)await pool.query("UPDATE job SET status='failed',error=$2,completed_at=now() WHERE id=$1",[job.id,detail]);if(job)await invalidateCache(`job:${job.id}`);logger.error("worker.job_failed",{jobId:job?.id,error:detail});channel.ack(message);}},{noAck:false});logger.info("worker.consuming");}
 for(const signal of ["SIGINT","SIGTERM"] as const)process.on(signal,()=>void closeQueue().finally(()=>process.exit(0)));
 main().catch((error)=>{console.error(error);process.exitCode=1;});

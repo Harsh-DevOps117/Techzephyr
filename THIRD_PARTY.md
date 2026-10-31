@@ -12,6 +12,8 @@ TechZephyr uses the following open-source packages and services. Scheduling corr
 - Next.js and React — TypeScript web application.
 - OpenAI JavaScript SDK — optional Groq-compatible booking-draft extraction only.
 - TypeScript and tsx — compilation and development tooling.
+- Winston — structured API and worker logs.
+- llm-guardrails — prompt-injection, toxicity, secret, and length checks on AI input and output.
 - Swagger UI — local OpenAPI documentation.
 
 The deterministic timetable, exam, repair and booking algorithms are implemented in this repository under `src/application/scheduling/solver.ts`. The supplied `validator.py` remains the final correctness contract.

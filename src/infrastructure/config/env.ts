@@ -22,6 +22,23 @@ const configSchema = z.object({
   DB_POOL_MAX: z.coerce.number().int().positive().max(100).default(20),
   DB_POOL_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   DB_POOL_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  JWT_SECRET: z.string().min(32),
+  ACCESS_TOKEN_MINUTES: z.coerce.number().int().positive().max(60).default(15),
+  REFRESH_TOKEN_DAYS: z.coerce.number().int().positive().max(30).default(7),
+  LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
+  TEAM_NAME: z.string().min(1).max(80).default("TechZephyr"),
+  ALLOW_HEADER_AUTH: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
 });
 
-export const config = configSchema.parse(process.env);
+const parsed = configSchema.parse(process.env);
+if (parsed.NODE_ENV === "production" && parsed.JWT_SECRET.includes("replace-this-development-secret")) {
+  throw new Error("Set a unique JWT_SECRET before running in production");
+}
+
+export const config = {
+  ...parsed,
+  ALLOW_HEADER_AUTH: parsed.ALLOW_HEADER_AUTH || parsed.NODE_ENV !== "production",
+};

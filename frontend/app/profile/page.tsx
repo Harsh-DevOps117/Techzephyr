@@ -68,7 +68,7 @@ export default function ProfilePage() {
             <strong>{(profile?.role ?? "campus").replaceAll("_", " ")}</strong>
             <p>{note.title}</p>
           </div>
-          <button className="ghost" onClick={() => { localStorage.clear(); router.push("/"); }}>Sign out</button>
+          <button className="ghost" onClick={() => { const refreshToken = localStorage.getItem("tz_refresh_token"); if (refreshToken) void api("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) }); localStorage.clear(); router.push("/"); }}>Sign out</button>
         </article>
         <article className="sticky yellow">
           <b>What you can do</b>
