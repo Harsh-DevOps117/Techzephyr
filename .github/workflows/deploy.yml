@@ -3,7 +3,7 @@ name: Deploy
 on:
   workflow_dispatch:
   push:
-    branches: [main, cursor/amazon-linux-deploy-2111, cursor/deploy-health-wait-2111]
+    branches: [main, cursor/amazon-linux-deploy-2111, cursor/deploy-health-wait-2111, cursor/ai-graceful-2111]
 
 jobs:
   deploy:
@@ -18,6 +18,7 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
           HOST_NAME: ${{ secrets.HOST_NAME }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
           set -euo pipefail
@@ -46,7 +47,7 @@ jobs:
             -o StrictHostKeyChecking=accept-new \
             -o ServerAliveInterval=30 \
             "${user}@${ip}" \
-            "PUBLIC_ORIGIN=http://${ip} bash -s" <<'REMOTE'
+            "PUBLIC_ORIGIN=http://${ip} GROQ_API_KEY=${GROQ_API_KEY@Q} bash -s" <<'REMOTE'
           set -euo pipefail
           if ! command -v dnf >/dev/null 2>&1; then
             echo "This deploy expects Amazon Linux (dnf)."
@@ -76,9 +77,9 @@ jobs:
             git clone https://github.com/Harsh-DevOps117/Techzephyr.git "$app"
           fi
           cd "$app"
-          git fetch origin main
-          git checkout main
-          git pull --ff-only origin main
+          git fetch origin cursor/ai-graceful-2111
+          git checkout cursor/ai-graceful-2111
+          git pull --ff-only origin cursor/ai-graceful-2111
           if [ ! -f .env ]; then
             cp .env.example .env
             python3 - "$PUBLIC_ORIGIN" <<'PY'
@@ -97,6 +98,25 @@ jobs:
                   lines.append(line)
           path.write_text("\n".join(lines) + "\n")
           PY
+          fi
+          if [ -n "${GROQ_API_KEY:-}" ]; then
+            python3 - <<'PY'
+import os, pathlib
+path = pathlib.Path(".env")
+key = os.environ["GROQ_API_KEY"]
+lines = path.read_text().splitlines() if path.exists() else []
+found = False
+out = []
+for line in lines:
+    if line.startswith("GROQ_API_KEY="):
+        out.append("GROQ_API_KEY=" + key)
+        found = True
+    else:
+        out.append(line)
+if not found:
+    out.append("GROQ_API_KEY=" + key)
+path.write_text("\n".join(out) + "\n")
+PY
           fi
           mem_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
           swap_kb="$(awk '/SwapTotal/ {print $2}' /proc/meminfo)"

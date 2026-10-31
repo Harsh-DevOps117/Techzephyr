@@ -167,7 +167,7 @@ paths:
               schema:
                 type: object
                 required: [draft, validation, requestId]
-        '503': { description: AI provider is unavailable; use the manual form. }
+        '200': { description: Draft, or a clear message that the manual form must be used when the model is unavailable. }
   /api/v1/ai/assistant:
     post:
       tags: [AI]
@@ -175,12 +175,12 @@ paths:
       responses:
         '200': { description: Spoken reply and an editable draft }
         '400': { description: Blocked by guardrails }
-        '503': { description: Model unavailable }
+        '200': { description: A draft, or a clear message to use the manual form when the model is unavailable. }
   /api/v1/ai/schedule-change-drafts:
     post:
       tags: [AI]
       summary: Turn a faculty schedule-change prompt into an editable disruption draft
-      responses: { '200': { description: Schema-validated draft that still requires deterministic repair and approval }, '503': { description: AI unavailable; upload the manual change format } }
+      responses: { '200': { description: Schema-validated draft, or a clear message to upload the manual change when the model is unavailable. } }
   /api/v1/jobs:
     get:
       tags: [Jobs]

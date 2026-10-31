@@ -19,7 +19,7 @@ export async function parseScheduleChange(text:string):Promise<ScheduleChangeDra
   assertAiInput(text);
   if(!config.GROQ_API_KEY)throw new AiUnavailableError();
   try{
-    const client=new OpenAI({apiKey:config.GROQ_API_KEY,baseURL:"https://api.groq.com/openai/v1"});
+    const client=new OpenAI({apiKey:config.GROQ_API_KEY,baseURL:"https://api.groq.com/openai/v1",timeout:20000,maxRetries:0});
     const completion=await client.chat.completions.create({model:config.GROQ_MODEL,temperature:0,response_format:{type:"json_object"},messages:[{role:"system",content:prompt},{role:"user",content:text}]});
     const raw=completion.choices[0]?.message.content;if(!raw)throw new Error("AI provider returned no schedule-change draft");
     assertAiOutput(raw);
