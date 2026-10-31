@@ -151,6 +151,11 @@ paths:
       tags: [AI]
       summary: Turn a faculty schedule-change prompt into an editable disruption draft
       responses: { '200': { description: Schema-validated draft that still requires deterministic repair and approval }, '503': { description: AI unavailable; upload the manual change format } }
+  /api/v1/jobs:
+    get:
+      tags: [Jobs]
+      summary: List recent background jobs with type, status and timing
+      responses: { '200': { description: Recent jobs } }
   /api/v1/jobs/{id}:
     get:
       tags: [Jobs]
@@ -194,7 +199,8 @@ paths:
   /api/v1/datasets:
     get:
       tags: [Datasets]
-      summary: List imported immutable dataset versions
+      summary: List imported dataset versions with room, session and exam counts
+      description: Available to Admin, department coordinator and faculty so repair and generation screens can offer a card picker.
       responses: { '200': { description: Dataset versions } }
   /api/v1/schedules:
     get:
@@ -206,6 +212,14 @@ paths:
       tags: [Schedules]
       summary: List zero-conflict proposals awaiting Admin approval
       responses: { '200': { description: Pending approval queue } }
+  /api/v1/schedules/{id}/catalog:
+    get:
+      tags: [Schedules]
+      summary: List rooms, faculty and student groups for a schedule
+      description: Human-readable catalog used by timetable filters, manual events and venue requests. Identifiers stay on the server side of the card picker.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Rooms, faculty and groups }, '404': { description: Not found } }
   /api/v1/schedules/{id}:
     get:
       tags: [Schedules]

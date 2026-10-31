@@ -586,9 +586,19 @@ export function createApp() {
 
   app.get(
     "/api/v1/datasets",
-    requireRole("admin"),
+    requireRole("admin", "department_coordinator", "faculty"),
     asyncRoute(async (_req, res) => {
-      const found = await query("SELECT id,dataset_id,source_name,content_hash,created_at FROM dataset_version ORDER BY created_at DESC");
+      const found = await query(
+        `SELECT id, dataset_id, source_name, content_hash, created_at,
+                COALESCE(jsonb_array_length(payload->'rooms'), 0) AS rooms,
+                COALESCE(jsonb_array_length(payload->'faculty'), 0) AS faculty,
+                COALESCE(jsonb_array_length(payload->'student_groups'), 0) AS groups,
+                COALESCE(jsonb_array_length(payload->'sessions'), 0) AS sessions,
+                COALESCE(jsonb_array_length(payload->'exams'), 0) AS exams,
+                COALESCE(jsonb_array_length(payload->'booking_requests'), 0) AS booking_requests
+         FROM dataset_version
+         ORDER BY created_at DESC`,
+      );
       res.json({ items: found.rows });
     }),
   );
@@ -597,7 +607,16 @@ export function createApp() {
     "/api/v1/schedules",
     requireRole("admin", "department_coordinator", "faculty", "club"),
     asyncRoute(async (_req, res) => {
-      const found = await query("SELECT id,dataset_version_id,baseline_schedule_id,status,validation_report,created_by,approved_by,approved_at,created_at,updated_at FROM schedule_version ORDER BY created_at DESC LIMIT 50");
+      const found = await query(
+        `SELECT s.id, s.dataset_version_id, s.baseline_schedule_id, s.status, s.validation_report,
+                s.created_by, s.approved_by, s.approved_at, s.created_at, s.updated_at,
+                d.dataset_id, d.source_name, u.display_name AS created_by_name
+         FROM schedule_version s
+         JOIN dataset_version d ON d.id = s.dataset_version_id
+         LEFT JOIN app_user u ON u.id = s.created_by
+         ORDER BY s.created_at DESC
+         LIMIT 50`,
+      );
       res.json({ items: found.rows });
     }),
   );
@@ -608,6 +627,50 @@ export function createApp() {
     asyncRoute(async (_req, res) => {
       const found = await query("SELECT s.id,s.baseline_schedule_id,s.validation_report,s.created_at,u.display_name AS created_by_name FROM schedule_version s LEFT JOIN app_user u ON u.id=s.created_by WHERE s.status='pending_admin_approval' ORDER BY s.created_at");
       res.json({ items: found.rows });
+    }),
+  );
+
+  app.get(
+    "/api/v1/schedules/:id/catalog",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const id = actorIdSchema.parse(req.params.id);
+      const found = await query<{ payload: Record<string, unknown> }>(
+        "SELECT d.payload FROM schedule_version s JOIN dataset_version d ON d.id = s.dataset_version_id WHERE s.id = $1",
+        [id],
+      );
+      if (!found.rowCount)
+        throw new ApiError(404, "schedule_not_found", "Schedule version does not exist");
+      const payload = found.rows[0].payload as {
+        rooms?: Array<Record<string, unknown>>;
+        faculty?: Array<Record<string, unknown>>;
+        student_groups?: Array<Record<string, unknown>>;
+      };
+      const asText = (value: unknown, fallback = "") =>
+        value === undefined || value === null || value === "" ? fallback : String(value);
+      const rooms = (payload.rooms ?? []).map((room) => ({
+        id: asText(room.id),
+        name: asText(room.name, asText(room.id)),
+        building: room.building ? asText(room.building) : null,
+        type: asText(room.type).replaceAll("_", " "),
+        capacity: Number(room.capacity ?? 0),
+        features: Array.isArray(room.features) ? room.features.map(String) : [],
+        accessible: Boolean(room.accessible),
+        allowedUses: Array.isArray(room.allowed_uses) ? room.allowed_uses.map(String) : [],
+      }));
+      const faculty = (payload.faculty ?? []).map((person) => ({
+        id: asText(person.id),
+        name: asText(person.name, asText(person.id)),
+        department: person.department ? asText(person.department) : null,
+      }));
+      const groups = (payload.student_groups ?? []).map((group) => ({
+        id: asText(group.id),
+        name: asText(group.name, asText(group.id)),
+        year: group.year === undefined || group.year === null ? null : Number(group.year),
+        department: group.department ? asText(group.department) : null,
+        size: Number(group.size ?? 0),
+      }));
+      res.json({ scheduleVersionId: id, rooms, faculty, groups });
     }),
   );
 
@@ -707,6 +770,20 @@ export function createApp() {
         for (const table of ["venue_request", "manual_event", "booking_decision", "schedule_session", "audit_log", "idempotency_record", "outbox_event", "job", "schedule_version", "dataset_version"]) await client.query(`DELETE FROM ${table}`);
       });
       res.json({ status: "reset", message: "Demo datasets, schedules, jobs and decisions were cleared", requestId: req.requestId });
+    }),
+  );
+
+  app.get(
+    "/api/v1/jobs",
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (_req, res) => {
+      const found = await query(
+        `SELECT id, type, priority, status, error, attempt_count, created_at, started_at, completed_at
+         FROM job
+         ORDER BY created_at DESC
+         LIMIT 40`,
+      );
+      res.json({ items: found.rows });
     }),
   );
 

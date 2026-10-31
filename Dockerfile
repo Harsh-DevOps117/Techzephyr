@@ -26,4 +26,4 @@ COPY validator.py ./validator.py
 COPY docs ./docs
 COPY data ./data
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/interfaces/http/server.js"]
