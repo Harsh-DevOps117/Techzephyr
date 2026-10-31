@@ -107,6 +107,12 @@ jobs:
             sudo swapon /swapfile || true
           fi
           export COMPOSE_PARALLEL_LIMIT=1
+          sudo docker compose down --remove-orphans || true
+          sudo docker rm -f \
+            techzephyr4-postgres-1 techzephyr4-rabbitmq-1 techzephyr4-redis-1 \
+            techzephyr4-api-1 techzephyr4-worker-1 techzephyr4-frontend-1 \
+            techzephyr4-nginx-1 techzephyr4-swagger-ui-1 >/dev/null 2>&1 || true
+          sudo docker network rm techzephyr4_default >/dev/null 2>&1 || true
           sudo docker compose build
           sudo docker compose up -d
           sudo docker compose ps
