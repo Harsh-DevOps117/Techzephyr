@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { canOpen } from "../../lib/access";
 
 type Dash = {
   datasetVersionId: string | null;
@@ -70,7 +71,41 @@ const pageHints: Record<string, Hint> = {
   },
 };
 
-function fromState(dash: Dash | null): Hint {
+function retarget(hint: Hint, role: string): Hint {
+  if (!role || canOpen(role, hint.href)) return hint;
+  if (role === "club") {
+    return {
+      title: "Ask for a room, or read the published week.",
+      copy: "You can submit a venue request. An admin publishes the timetable.",
+      href: "/bookings",
+      label: "Next: Venues",
+    };
+  }
+  return {
+    ...hint,
+    copy: "An admin publishes proposals. You can read the timetable.",
+    href: "/schedule",
+    label: "Next: Timetable",
+  };
+}
+
+function fromState(dash: Dash | null, role: string): Hint {
+  if (role === "club") {
+    return {
+      title: "Ask for a room in plain language.",
+      copy: "Use Venues, or the assistant on this page. You do not approve the result.",
+      href: "/bookings",
+      label: "Next: Venues",
+    };
+  }
+  if (role === "faculty") {
+    return {
+      title: "Read your week, or describe a leave.",
+      copy: "A repair stays a proposal until an admin approves it.",
+      href: "/schedule",
+      label: "Next: Timetable",
+    };
+  }
   if (!dash?.datasetVersionId) {
     return {
       title: "Start by importing the CIT dataset.",
@@ -97,12 +132,12 @@ function fromState(dash: Dash | null): Hint {
     };
   }
   if (dash.pendingApprovals > 0 || status === "pending_admin_approval") {
-    return {
+    return retarget({
       title: "A different admin needs to approve the week.",
       copy: "The creator cannot approve their own proposal. Use reviewer@cit.local.",
       href: "/approvals",
       label: "Next: Approvals",
-    };
+    }, role);
   }
   return {
     title: "The week is approved. Read it or decide venues.",
@@ -112,14 +147,14 @@ function fromState(dash: Dash | null): Hint {
   };
 }
 
-export function NextGuide({ path }: { path: string }) {
+export function NextGuide({ path, role }: { path: string; role: string }) {
   const [dash, setDash] = useState<Dash | null>(null);
   useEffect(() => {
     api<Dash>("/api/v1/dashboard").then((result) => {
       if (result.data) setDash(result.data);
     });
   }, [path]);
-  const hint = pageHints[path] ?? fromState(dash);
+  const hint = retarget(pageHints[path] ?? fromState(dash, role), role);
   return (
     <div className="next-guide">
       <span>Do this next</span>

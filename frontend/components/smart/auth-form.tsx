@@ -38,6 +38,11 @@ export function AuthForm() {
     localStorage.setItem("tz_access_token", result.data.accessToken);
     localStorage.setItem("tz_refresh_token", result.data.refreshToken);
     localStorage.setItem("tz_role", result.data.role);
+    const me = await api<{ display_name: string; role: string }>("/api/v1/auth/me");
+    if (me.data) {
+      localStorage.setItem("tz_name", me.data.display_name);
+      localStorage.setItem("tz_role", me.data.role);
+    }
     router.replace("/dashboard");
   }
 

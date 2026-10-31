@@ -6,6 +6,7 @@ import { api } from "../../lib/api";
 import type { BookingDraft } from "../../lib/types";
 import { roomCards, scheduleCards, useApiList, useCatalog, type ScheduleSummary } from "../../lib/catalog";
 import { PickerCards } from "../../components/smart/picker-cards";
+import { canOpen } from "../../lib/access";
 import { ArrowIcon, CalendarIcon, CheckIcon, SparkIcon, WrenchIcon } from "../../components/ui/icons";
 
 type LiveItem = { session_id: string; day: string; start_period: number; room_id: string; courseId: string; kind: string; duration: number };
@@ -21,6 +22,7 @@ export default function Home() {
   const [bookingSchedule, setBookingSchedule] = useState("");
   const [bookingCategory, setBookingCategory] = useState("club_event");
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
+  const [role, setRole] = useState("");
   const [overview, setOverview] = useState<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { id: string; hardViolations: number; softPenalty: number } | null } | null>(null);
   const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
   const catalog = useCatalog(bookingSchedule);
@@ -30,6 +32,7 @@ export default function Home() {
   );
 
   useEffect(() => {
+    setRole(localStorage.getItem("tz_role") ?? "");
     fetch("/backend/health").then((response) => setApiOnline(response.ok)).catch(() => setApiOnline(false));
     api<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { id: string; hardViolations: number; softPenalty: number } | null }>("/api/v1/dashboard").then((response) => response.data && setOverview(response.data));
   }, []);
@@ -102,14 +105,24 @@ export default function Home() {
         <div className={`api-state ${apiOnline === false ? "offline" : ""}`}><i />{apiOnline === null ? "Checking services" : apiOnline ? "All services operational" : "API unavailable"}</div>
       </header>
       <ol className="step-rail">
-        <li><Link href="/datasets"><b>1</b><span>Import the dataset</span><small>Data manager</small></Link></li>
-        <li><Link href="/schedule"><b>2</b><span>Generate the week</span><small>Timetable</small></Link></li>
-        <li><Link href="/approvals"><b>3</b><span>Approve it</span><small>A different admin</small></Link></li>
-        <li><Link href="/bookings"><b>4</b><span>Decide venues</span><small>Spectra requests</small></Link></li>
+        {([
+          ["/datasets", "1", "Import the dataset", "Data manager"],
+          ["/schedule", "2", "Generate the week", "Timetable"],
+          ["/approvals", "3", "Approve it", "A different admin"],
+          ["/bookings", "4", "Decide venues", "Spectra requests"],
+        ] as const).map(([href, number, title, detail]) => (
+          <li key={href}>
+            {!role || canOpen(role, href) ? (
+              <Link href={href}><b>{number}</b><span>{title}</span><small>{detail}</small></Link>
+            ) : (
+              <span className="locked"><b>{number}</b><span>{title}</span><small>Another role</small></span>
+            )}
+          </li>
+        ))}
       </ol>
       <section className="attention-grid">
         <article className="attention hero-card"><span className="card-icon coral"><CalendarIcon /></span><div><small>TIMETABLE</small><strong>{overview ? `${overview.counts.sessions} sessions` : "No dataset yet"}</strong><p>{overview?.latestSchedule ? `${overview.latestSchedule.hardViolations} hard conflicts · ${overview.roomUtilization}% room utilisation` : "Import a dataset, then generate the week."}</p></div><Link href="/schedule">Open scheduler <ArrowIcon /></Link></article>
-        <article className="attention"><span className="card-icon violet"><WrenchIcon /></span><div><small>CHANGES</small><strong>Repair safely</strong><p>Upload disruptions and review every move.</p></div><Link href="/repair">Plan a repair <ArrowIcon /></Link></article>
+        {(!role || canOpen(role, "/repair")) && <article className="attention"><span className="card-icon violet"><WrenchIcon /></span><div><small>CHANGES</small><strong>Repair safely</strong><p>Upload disruptions and review every move.</p></div><Link href="/repair">Plan a repair <ArrowIcon /></Link></article>}
         <article className="attention"><span className="card-icon mint"><SparkIcon /></span><div><small>SPECTRA WEEK</small><strong>{overview ? `${overview.counts.bookingRequests} requests` : "No requests yet"}</strong><p>{overview?.pendingApprovals ?? 0} validated proposals await approval.</p></div><Link href="/bookings">Review requests <ArrowIcon /></Link></article>
       </section>
       <section className="dashboard-grid">

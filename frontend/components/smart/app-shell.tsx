@@ -7,16 +7,19 @@ import { api } from "../../lib/api";
 import { BriefcaseIcon, CalendarIcon, CheckIcon, DatabaseIcon, GridIcon, MenuIcon, SparkIcon, WrenchIcon } from "../ui/icons";
 import { NextGuide } from "./next-guide";
 import { VoiceAssistant } from "./voice-assistant";
+import { SmoothScroll } from "../motion/smooth-scroll";
+import { PageTransition } from "../motion/page-transition";
+import { canOpen, type Role } from "../../lib/access";
 
-const links = [
-  { href: "/dashboard", label: "Workspace", icon: GridIcon },
-  { href: "/datasets", label: "Data", icon: DatabaseIcon },
-  { href: "/schedule", label: "Timetable", icon: CalendarIcon },
-  { href: "/approvals", label: "Approvals", icon: CheckIcon },
-  { href: "/bookings", label: "Venues", icon: SparkIcon },
-  { href: "/repair", label: "Changes", icon: WrenchIcon },
-  { href: "/manual", label: "Events", icon: CalendarIcon },
-  { href: "/jobs", label: "Jobs", icon: BriefcaseIcon },
+const links: { href: string; label: string; icon: typeof GridIcon; roles: Role[] }[] = [
+  { href: "/dashboard", label: "Workspace", icon: GridIcon, roles: ["admin", "department_coordinator", "faculty", "club"] },
+  { href: "/datasets", label: "Data", icon: DatabaseIcon, roles: ["admin", "department_coordinator", "faculty"] },
+  { href: "/schedule", label: "Timetable", icon: CalendarIcon, roles: ["admin", "department_coordinator", "faculty", "club"] },
+  { href: "/approvals", label: "Approvals", icon: CheckIcon, roles: ["admin"] },
+  { href: "/bookings", label: "Venues", icon: SparkIcon, roles: ["admin", "department_coordinator", "faculty", "club"] },
+  { href: "/repair", label: "Changes", icon: WrenchIcon, roles: ["admin", "department_coordinator", "faculty"] },
+  { href: "/manual", label: "Events", icon: CalendarIcon, roles: ["admin", "department_coordinator"] },
+  { href: "/jobs", label: "Jobs", icon: BriefcaseIcon, roles: ["admin", "department_coordinator", "faculty", "club"] },
 ];
 
 const publicPaths = new Set(["/", "/login"]);
@@ -29,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [savedName, setSavedName] = useState("CIT user");
-  const [savedRole, setSavedRole] = useState("admin");
+  const [savedRole, setSavedRole] = useState("");
   useEffect(() => {
     if (process.env.NODE_ENV === "production") navigator.serviceWorker?.register("/sw.js");
     else navigator.serviceWorker?.getRegistrations().then((items) => items.forEach((item) => item.unregister()));
@@ -49,8 +52,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
     });
   }, [path]);
-  if (publicPaths.has(path)) return <>{children}</>;
-  const role = (profile?.role ?? savedRole).replaceAll("_", " ");
+  if (publicPaths.has(path)) return <><SmoothScroll />{children}</>;
+  const roleKey = profile?.role ?? savedRole;
+  const role = (roleKey || "account").replaceAll("_", " ");
+  const allowed = roleKey ? canOpen(roleKey, path) : true;
+  const visible = links.filter((link) => !roleKey || link.roles.includes(roleKey as Role));
   const name = profile?.display_name ?? savedName;
   const initials = name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
   return (
@@ -58,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className={`sidebar ${open ? "open" : ""}`}>
         <Link className="brand" href="/dashboard" onClick={() => setOpen(false)}><span className="mark">C</span><span><b>TechZephyr</b><small>CIT scheduling</small></span></Link>
         <p className="side-kicker">Campus</p>
-        <nav aria-label="Primary navigation">{links.map(({ href, label, icon: NavIcon }) => <Link className={path === href ? "active" : ""} href={href} key={href} onClick={() => setOpen(false)}><NavIcon /><span>{label}</span></Link>)}</nav>
+        <nav aria-label="Primary navigation">{visible.map(({ href, label, icon: NavIcon }) => <Link className={path === href ? "active" : ""} href={href} key={href} onClick={() => setOpen(false)}><NavIcon /><span>{label}</span></Link>)}</nav>
         <div className="sidebar-foot">
           <Link href="/profile" onClick={() => setOpen(false)} className="who">
             <span className="avatar">{initials}</span>
@@ -69,8 +75,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="app-content">
         <div className="mobile-bar"><button onClick={() => setOpen(!open)} aria-label="Toggle menu"><MenuIcon /></button><span>CIT Campus</span><Link href="/profile">Profile</Link></div>
-        <NextGuide path={path} />
-        {children}
+        <NextGuide path={path} role={roleKey} />
+        <PageTransition>
+          {allowed ? children : (
+            <main className="route">
+              <p className="eyebrow">ACCESS</p>
+              <h1>This role cannot open this screen.</h1>
+              <p>Your account can use the pages listed in the sidebar. The API enforces the same limit.</p>
+              <a className="primary" href="/dashboard" data-testid="forbidden">Back to workspace</a>
+            </main>
+          )}
+        </PageTransition>
         <VoiceAssistant />
       </div>
     </div>

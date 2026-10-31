@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 const nextConfig: NextConfig = {
   output: "standalone",
+  devIndicators: false,
   turbopack: { root: dirname(fileURLToPath(import.meta.url)) },
   async headers() {
     return [

@@ -70,12 +70,12 @@ export default function ProfilePage() {
           </div>
           <button className="ghost" onClick={() => { const refreshToken = localStorage.getItem("tz_refresh_token"); if (refreshToken) void api("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) }); localStorage.clear(); router.push("/"); }}>Sign out</button>
         </article>
-        <article className="sticky yellow">
+        <article className="note-card">
           <b>What you can do</b>
           <ul>{note.points.map((point) => <li key={point}>{point}</li>)}</ul>
-          <Link href={note.href} className="pill">{note.next}</Link>
+          <Link href={note.href} className="primary">{note.next}</Link>
         </article>
-        <article className="sticky mint">
+        <article className="note-card">
           <b>What you never type</b>
           <p>Schedules, rooms, groups and jobs are cards. Click the one with the name you recognise.</p>
           <Link href="/dashboard" className="text-link">Back to the four steps</Link>
