@@ -130,7 +130,7 @@ Each session needs exactly one `day`, `start_period` and `room_id`. Faculty are 
 ```
 A booking must fit fully inside one window to be approved. `raw_text` is the original message, so it doubles as test input for your plain-language parser.
 
-**Category is capped by role.** `role_category_cap` in the dataset says the highest category each role may claim. A club asking for `institute_event` is still a `club_event`. Priority order is in `priority_order`; ties go to the earlier `submitted_at`.
+**Workspace requests keep the chosen category.** A club, faculty member, or coordinator can submit a club event, department event, guest lecture, or institute event, and the checker uses that category. Official dataset requests still follow `role_category_cap`. Priority order is in `priority_order`; ties go to the earlier `submitted_at`. An admin or coordinator accepts or rejects the proposal on Venues. The requester cannot review their own request, and Accept cannot force a slot the checker already rejected.
 
 **cancellations** lists requests withdrawn after submission. Never approve those.
 

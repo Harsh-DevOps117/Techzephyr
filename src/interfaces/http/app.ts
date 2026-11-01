@@ -23,7 +23,7 @@ import {
 } from "../../application/idempotency/service.js";
 import { createJob, publishOutbox } from "../../application/jobs/service.js";
 import type { Role } from "../../domain/shared/types.js";
-import { decideBookings, type CitDataset, type Placement } from "../../application/scheduling/solver.js";
+import { decideBookings, type CitDataset, type Day, type HeldSlot, type Placement } from "../../application/scheduling/solver.js";
 import {
   getCachedJson,
   setCachedJson,
@@ -182,6 +182,7 @@ const manualEventSchema = z.object({
   mandatoryGroups: z.array(z.string().min(1).max(64)).max(30).default([]),
   reason: z.string().trim().min(3).max(500),
 }).refine((value) => value.endPeriod >= value.startPeriod, { message: "End period must be at or after the start period" });
+const reviewActionSchema = z.object({ action: z.enum(["accept", "reject"]) });
 const bookingSubmissionSchema = z.object({
   scheduleVersionId: z.string().uuid(),
   title: z.string().trim().min(3).max(160),
@@ -570,13 +571,24 @@ export function createApp() {
       const found = await query<{ payload: CitDataset; objective: { export?: { sessions: Placement[] } } }>("SELECT d.payload,s.objective FROM schedule_version s JOIN dataset_version d ON d.id=s.dataset_version_id WHERE s.id=$1 AND s.status='approved'", [input.scheduleVersionId]);
       if (!found.rowCount) throw new ApiError(409, "approved_schedule_required", "Submit requests against an approved schedule");
       const id = `USR-${uuidv7()}`;
-      const request = { id, submitted_at: new Date().toISOString(), requester: req.actor!.id, role: req.actor!.role, requested_category: input.requestedCategory, title: input.title, attendance: input.draft.attendance, duration_periods: input.draft.duration_periods, windows: input.draft.windows, room_types: input.draft.room_types, needs: input.draft.needs, requested_room: input.draft.requested_room, mandatory_for_groups: input.draft.mandatory_for_groups };
+      const request = { id, submitted_at: new Date().toISOString(), requester: req.actor!.id, role: req.actor!.role, requested_category: input.requestedCategory, honor_requested_category: true, title: input.title, attendance: input.draft.attendance, duration_periods: input.draft.duration_periods, windows: input.draft.windows, room_types: input.draft.room_types, needs: input.draft.needs, requested_room: input.draft.requested_room, mandatory_for_groups: input.draft.mandatory_for_groups };
       const data = structuredClone(found.rows[0].payload);
       data.booking_requests = [...(data.booking_requests ?? []), request];
-      const proposed = decideBookings(data, found.rows[0].objective.export?.sessions ?? []).find((decision) => decision.request_id === id)!;
+      const heldRows = await query<{ proposed_decision: { status?: string; room_id?: string; day?: string; start_period?: number; end_period?: number } }>(
+        "SELECT proposed_decision FROM venue_request WHERE schedule_version_id=$1 AND status IN ('pending_review','approved','alternative_offered')",
+        [input.scheduleVersionId],
+      );
+      const days = new Set(["MON", "TUE", "WED", "THU", "FRI"]);
+      const held: HeldSlot[] = heldRows.rows.flatMap((row) => {
+        const decision = row.proposed_decision;
+        if (!decision || (decision.status !== "approved" && decision.status !== "alternative_offered")) return [];
+        if (!decision.room_id || !decision.day || !days.has(decision.day) || !decision.start_period || !decision.end_period || decision.end_period < decision.start_period) return [];
+        return [{ room_id: decision.room_id, day: decision.day as Day, start_period: decision.start_period, end_period: decision.end_period }];
+      });
+      const proposed = decideBookings(data, found.rows[0].objective.export?.sessions ?? [], held).find((decision) => decision.request_id === id)!;
       const databaseId = uuidv7();
       await query("INSERT INTO venue_request(id,schedule_version_id,title,requested_category,draft,proposed_decision,status,requested_by) VALUES($1,$2,$3,$4,$5,$6,'pending_review',$7)", [databaseId, input.scheduleVersionId, input.title, input.requestedCategory, input.draft, proposed, req.actor!.id]);
-      res.status(201).json({ id: databaseId, status: "pending_review", proposedDecision: proposed, roleCategoryApplied: req.actor!.role, deterministic: true });
+      res.status(201).json({ id: databaseId, status: "pending_review", proposedDecision: proposed, appliedCategory: input.requestedCategory, deterministic: true });
     }),
   );
 
@@ -585,8 +597,13 @@ export function createApp() {
     requireRole("admin", "department_coordinator", "faculty", "club"),
     asyncRoute(async (req, res) => {
       const admin = req.actor!.role === "admin" || req.actor!.role === "department_coordinator";
-      const found = await query("SELECT id,schedule_version_id,title,requested_category,proposed_decision,status,requested_by,reviewed_by,reviewed_at,created_at FROM venue_request WHERE $1::boolean OR requested_by=$2 ORDER BY created_at DESC", [admin, req.actor!.id]);
-      res.json({ items: found.rows });
+      const found = await query<{ requested_by: string; status: string }>("SELECT id,schedule_version_id,title,requested_category,proposed_decision,status,requested_by,reviewed_by,reviewed_at,created_at FROM venue_request WHERE $1::boolean OR requested_by=$2 ORDER BY created_at DESC", [admin, req.actor!.id]);
+      res.json({
+        items: found.rows.map((row) => ({
+          ...row,
+          canReview: admin && row.requested_by !== req.actor!.id && row.status === "pending_review",
+        })),
+      });
     }),
   );
 
@@ -595,12 +612,17 @@ export function createApp() {
     requireRole("admin", "department_coordinator"),
     asyncRoute(async (req, res) => {
       const id = actorIdSchema.parse(req.params.id);
-      const found = await query<{ requested_by: string; proposed_decision: { status: "approved" | "rejected" | "alternative_offered" } }>("SELECT requested_by,proposed_decision FROM venue_request WHERE id=$1 AND status='pending_review'", [id]);
+      const action = reviewActionSchema.parse(req.body ?? {}).action;
+      const found = await query<{ requested_by: string; proposed_decision: { status: "approved" | "rejected" | "alternative_offered"; reason: string } }>("SELECT requested_by,proposed_decision FROM venue_request WHERE id=$1 AND status='pending_review'", [id]);
       if (!found.rowCount) throw new ApiError(404, "request_not_found", "Pending venue request does not exist");
       if (found.rows[0].requested_by === req.actor!.id) throw new ApiError(403, "self_approval_forbidden", "You cannot review your own venue request");
-      const status = found.rows[0].proposed_decision.status;
-      await query("UPDATE venue_request SET status=$2,reviewed_by=$3,reviewed_at=now() WHERE id=$1", [id, status, req.actor!.id]);
-      res.json({ id, status, decision: found.rows[0].proposed_decision });
+      const proposed = found.rows[0].proposed_decision;
+      if (action === "accept" && proposed.status === "rejected") throw new ApiError(409, "no_valid_slot", proposed.reason);
+      const decision = action === "reject"
+        ? { ...proposed, status: "rejected" as const, reason: proposed.status === "rejected" ? proposed.reason : `Rejected by a reviewer. The checker had proposed: ${proposed.reason}` }
+        : proposed;
+      await query("UPDATE venue_request SET status=$2,proposed_decision=$3,reviewed_by=$4,reviewed_at=now() WHERE id=$1", [id, decision.status, decision, req.actor!.id]);
+      res.json({ id, status: decision.status, decision });
     }),
   );
 

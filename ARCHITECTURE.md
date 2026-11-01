@@ -78,7 +78,7 @@ Every candidate passes the in-process rule engine and then the unchanged officia
 
 ## 6. Booking decisions and priority
 
-Booking precedence is a business rule, not queue priority. The effective category is derived from the dataset `priority_order`, capped by `role_category_cap`; ties use the earlier `submitted_at`. A requester cannot promote a club event to institute-event priority by changing text or form fields.
+Booking precedence is a business rule, not queue priority. Dataset requests use `priority_order` capped by `role_category_cap`. Requests submitted from the workspace set `honor_requested_category`, so the chosen category is used, including a club request for an institute event. Ties use the earlier `submitted_at`. Free text cannot change the category; the category field does. Accept and reject are a separate human step and cannot override a checker rejection.
 
 For each non-cancelled request, the booking worker considers fitting room/time candidates and creates one of:
 

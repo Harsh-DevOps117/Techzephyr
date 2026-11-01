@@ -237,6 +237,12 @@ a.text-link, .panel-title a, .attention > a { color: var(--blue); font-weight: 5
 .error { color: var(--danger); font-size: 14px; }
 .primary, .secondary, .ghost, .site-btn, .picker-card, .sidebar nav a { transition: background 160ms ease, border-color 160ms ease, color 160ms ease; }
 
+.review-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.review-actions .primary, .review-actions .secondary { padding: 8px 16px; font-size: 13px; }
+.review-actions small, .review-wait { margin: 0; max-width: 28ch; color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.45; }
+.draft-fields label small { font-weight: 400; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.request-review .panel-title p:last-child { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.45; max-width: 62ch; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

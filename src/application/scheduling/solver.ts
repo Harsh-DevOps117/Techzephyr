@@ -2,11 +2,12 @@ export type Day = "MON" | "TUE" | "WED" | "THU" | "FRI";
 export type Placement = { session_id: string; day: Day; start_period: number; room_id: string };
 export type ExamPlacement = { exam_id: string; day: string; session: string; rooms: string[] };
 export type BookingDecision = { request_id: string; status: "approved" | "rejected" | "alternative_offered"; day?: Day; start_period?: number; end_period?: number; room_id?: string; reason: string };
+export type HeldSlot = { room_id: string; day: Day; start_period: number; end_period: number };
 type Room = { id:string; name:string; type:string; capacity:number; features:string[]; accessible:boolean; allowed_uses:string[] };
 type Faculty = { id:string; max_hours_per_day?:number; unavailable?:Array<{day:Day;periods:number[]}>; preferences?:Array<{type:string;days?:Day[];periods:number[]}> };
 type Session = { id:string; course_id:string; kind:string; groups:string[]; faculty_id:string; size:number; duration:number; room_types:string[]; needs_accessible?:boolean; basket_slot?:string|null; fixed_slot?:{day:Day;start_period:number}|null };
 type Exam = { id:string; groups:string[]; size:number };
-type Request = { id:string; submitted_at:string; role:string; requested_category:string; title:string; attendance:number; duration_periods:number; windows:Array<{day:Day;from_period:number;to_period:number}>; room_types:string[]; needs:string[]; requested_room?:string|null; mandatory_for_groups:string[] };
+type Request = { id:string; submitted_at:string; role:string; requested_category:string; title:string; attendance:number; duration_periods:number; windows:Array<{day:Day;from_period:number;to_period:number}>; room_types:string[]; needs:string[]; requested_room?:string|null; mandatory_for_groups:string[]; honor_requested_category?: boolean };
 export type CitDataset = { dataset_id:string; calendar:{days:Day[];lab_start_periods:number[];lunch:{after_period:number};exam_week:{days:string[];sessions:Array<{id:string}>}}; priority_order:string[]; role_category_cap:Record<string,string>; rooms:Room[]; faculty:Faculty[]; sessions:Session[]; exams?:Exam[]; booking_requests?:Request[]; cancellations?:Array<{request_id:string}>; room_unavailability?:Array<{room_id:string;day:Day;periods:number[]}> };
 export type Disruption = { changes:Array<Record<string,unknown>> };
 
@@ -169,10 +170,11 @@ export function scheduleExams(data:CitDataset):ExamPlacement[]{
   return out;
 }
 
-function effectiveCategory(data:CitDataset,request:Request){const cap=data.role_category_cap[request.role]??"club_event";const requested=data.priority_order.indexOf(request.requested_category);return data.priority_order[Math.max(requested<0?data.priority_order.length-1:requested,data.priority_order.indexOf(cap))];}
-export function decideBookings(data:CitDataset,placements:Placement[]):BookingDecision[]{
+function effectiveCategory(data:CitDataset,request:Request){if(request.honor_requested_category&&data.priority_order.includes(request.requested_category))return request.requested_category;const cap=data.role_category_cap[request.role]??"club_event";const requested=data.priority_order.indexOf(request.requested_category);return data.priority_order[Math.max(requested<0?data.priority_order.length-1:requested,data.priority_order.indexOf(cap))];}
+export function decideBookings(data:CitDataset,placements:Placement[],held:HeldSlot[]=[]):BookingDecision[]{
   const sessions=new Map(data.sessions.map((s)=>[s.id,s])),busy=new Set<string>(),groupBusy=new Set<string>(),cancelled=new Set((data.cancellations??[]).map((c)=>c.request_id));
   for(const p of placements){const s=sessions.get(p.session_id)!;for(const period of periods(p.start_period,s.duration)){busy.add(key(p.room_id,p.day,period));for(const g of s.groups)groupBusy.add(key(g,p.day,period));}}
+  for(const slot of held){for(const period of periods(slot.start_period,slot.end_period-slot.start_period+1))busy.add(key(slot.room_id,slot.day,period));}
   const requests=[...(data.booking_requests??[])].sort((a,b)=>data.priority_order.indexOf(effectiveCategory(data,a))-data.priority_order.indexOf(effectiveCategory(data,b))||a.submitted_at.localeCompare(b.submitted_at));const decisions=new Map<string,BookingDecision>();
   const roomsFor=(req:Request)=>data.rooms.filter((r)=>r.allowed_uses.includes("event")&&req.room_types.includes(r.type)&&r.capacity>=req.attendance&&req.needs.every((n)=>n==="accessible"?r.accessible:r.features.includes(n))).sort((a,b)=>(a.id===req.requested_room?-1:0)-(b.id===req.requested_room?-1:0)||(a.capacity-req.attendance)-(b.capacity-req.attendance));
   const fits=(req:Request,room:Room,day:Day,start:number)=>periods(start,req.duration_periods).every((p)=>p<=13&&!busy.has(key(room.id,day,p))&&!req.mandatory_for_groups.some((g)=>groupBusy.has(key(g,day,p)))&&!(data.room_unavailability??[]).some((u)=>u.room_id===room.id&&u.day===day&&u.periods.includes(p)));
