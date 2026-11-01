@@ -230,6 +230,10 @@ a.text-link, .panel-title a, .attention > a { color: var(--blue); font-weight: 5
 .note-card { background: var(--stone); border: 0; border-radius: 8px; padding: 20px; }
 .note-card b { font-size: 24px; font-weight: 400; letter-spacing: -0.02em; }
 .note-card p, .note-card li { font-size: 15px; line-height: 1.5; }
+.window-list { display: grid; gap: 10px; margin-top: 12px; }
+.window-row { display: grid; grid-template-columns: 1.3fr .7fr .7fr .7fr auto; gap: 8px; align-items: end; }
+.window-row label { display: grid; gap: 4px; font-size: 12px; }
+@media (max-width: 760px) { .window-row { grid-template-columns: 1fr 1fr; } }
 .error { color: var(--danger); font-size: 14px; }
 .primary, .secondary, .ghost, .site-btn, .picker-card, .sidebar nav a { transition: background 160ms ease, border-color 160ms ease, color 160ms ease; }
 

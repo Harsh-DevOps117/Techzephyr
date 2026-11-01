@@ -15,6 +15,7 @@ export default function ManualEvent() {
   const [form, setForm] = useState({
     scheduleVersionId: "",
     title: "",
+    date: "",
     day: "MON",
     startPeriod: 10,
     endPeriod: 11,
@@ -87,11 +88,33 @@ export default function ManualEvent() {
           />
           <label>Event title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Guest lecture on sustainable design" /></label>
           <div className="three-fields">
-            <label>Day<select value={form.day} onChange={(event) => setForm({ ...form, day: event.target.value })}>{days.map((day) => <option key={day}>{day}</option>)}</select></label>
-            <label>Start period<input type="number" min="1" max="13" value={form.startPeriod} onChange={(event) => setForm({ ...form, startPeriod: Number(event.target.value) })} /></label>
-            <label>End period<input type="number" min="1" max="13" value={form.endPeriod} onChange={(event) => setForm({ ...form, endPeriod: Number(event.target.value) })} /></label>
+            <label>Date<input type="date" value={form.date} onChange={(event) => {
+              const value = event.target.value;
+              const date = new Date(`${value}T12:00:00`);
+              const name = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][date.getDay()];
+              if (value && (name === "SUN" || name === "SAT")) {
+                setError("Pick a Monday to Friday date.");
+                return;
+              }
+              setError("");
+              setForm({ ...form, date: value, day: days.find((day) => day === name) ?? form.day });
+            }} /></label>
+            <label>Day<select value={form.day} onChange={(event) => setForm({ ...form, day: event.target.value, date: "" })}>{days.map((day) => <option key={day}>{day}</option>)}</select></label>
+            <label>Start period<input type="number" min={1} max={13} value={form.startPeriod} onChange={(event) => {
+              const start = Math.min(13, Math.max(1, Math.floor(Number(event.target.value)) || 1));
+              setForm({ ...form, startPeriod: start, endPeriod: Math.max(form.endPeriod, start) });
+            }} /></label>
           </div>
-          <label>Attendance<input type="number" value={form.attendance} onChange={(event) => setForm({ ...form, attendance: Number(event.target.value) })} /></label>
+          <label>End period<input type="number" min={1} max={13} value={form.endPeriod} onChange={(event) => setForm({ ...form, endPeriod: Math.max(form.startPeriod, Math.min(13, Math.max(1, Math.floor(Number(event.target.value)) || 1))) })} /></label>
+          <label>Attendance<input type="number" min={1} step={1} value={form.attendance} onChange={(event) => {
+            const attendance = Math.floor(Number(event.target.value));
+            if (!Number.isFinite(attendance) || attendance < 1) {
+              setError("Attendance cannot be negative or zero.");
+              return;
+            }
+            setError("");
+            setForm({ ...form, attendance });
+          }} /></label>
           {form.scheduleVersionId && (
             <PickerCards
               label="Room"
