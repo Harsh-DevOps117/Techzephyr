@@ -16,6 +16,7 @@ type VenueRequest = {
   requested_category: string;
   status: string;
   created_at: string;
+  canReview?: boolean;
   proposed_decision: { status: string; reason: string; day?: string; start_period?: number; end_period?: number; room_id?: string };
 };
 
@@ -27,6 +28,7 @@ export default function Bookings() {
   const [job, setJob] = useState("");
   const [error, setError] = useState("");
   const [requests, setRequests] = useState<VenueRequest[]>([]);
+  const [notice, setNotice] = useState<{ id: string; message: string } | null>(null);
 
   async function loadRequests() {
     const response = await api<{ items: VenueRequest[] }>("/api/v1/booking-requests");
@@ -53,12 +55,16 @@ export default function Bookings() {
     setJob(response.data.jobId);
   }
 
-  async function review(id: string) {
+  async function review(id: string, action: "accept" | "reject") {
     setBusy(true);
-    const response = await api<{ status: string }>(`/api/v1/booking-requests/${id}/review`, { method: "POST", body: "{}" });
+    setNotice(null);
+    const response = await api<{ status: string }>(`/api/v1/booking-requests/${id}/review`, {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    });
     setBusy(false);
     if (!response.data) {
-      setError(response.error ?? "Review failed");
+      setNotice({ id, message: response.error ?? "Review failed" });
       return;
     }
     await loadRequests();
@@ -92,11 +98,11 @@ export default function Bookings() {
         <aside className="info-card">
           <p className="eyebrow">CONFLICT PRIORITY</p>
           <ol className="priority-list">{priority.map((item, index) => <li key={item}><b>{index + 1}</b><span>{item}</span></li>)}</ol>
-          <p className="rule-note">A requester’s role caps the category they can claim. Earlier submission breaks ties. Nobody approves their own request.</p>
+          <p className="rule-note">A request from the workspace keeps the category the person chose, including a club asking for an institute event. Dataset requests still follow the official role cap. Higher categories are decided first. Earlier submission breaks ties. Nobody accepts their own request.</p>
         </aside>
       </section>
       <section className="form-card request-review">
-        <div className="panel-title"><div><p className="eyebrow">NATURAL-LANGUAGE SUBMISSIONS</p><h2>Review deterministic proposals</h2></div></div>
+        <div className="panel-title"><div><p className="eyebrow">INCOMING REQUESTS</p><h2>Accept or reject</h2><p>When someone submits a venue request, an admin or coordinator who did not submit it can accept the checker’s proposal or reject it.</p></div></div>
         {requests.length === 0 ? (
           <div className="empty-state"><span>✓</span><h2>No submitted requests</h2><p>Editable drafts submitted from the dashboard appear here.</p></div>
         ) : (
@@ -113,7 +119,23 @@ export default function Bookings() {
                   <span><b>{request.proposed_decision.status.replaceAll("_", " ")}</b> proposal</span>
                   {request.proposed_decision.room_id && <span><b>{request.proposed_decision.room_id}</b>{request.proposed_decision.day} P{request.proposed_decision.start_period}</span>}
                 </div>
-                {request.status === "pending_review" && <button className="primary" onClick={() => review(request.id)} disabled={busy}>Apply reviewed decision</button>}
+                <div className="review-actions">
+                  {request.canReview && (
+                    <>
+                      <button
+                        className="primary"
+                        onClick={() => review(request.id, "accept")}
+                        disabled={busy || request.proposed_decision.status === "rejected"}
+                      >
+                        Accept
+                      </button>
+                      <button className="secondary" onClick={() => review(request.id, "reject")} disabled={busy}>Reject</button>
+                      {request.proposed_decision.status === "rejected" && <small>No valid slot, so Accept stays closed.</small>}
+                    </>
+                  )}
+                  {!request.canReview && request.status === "pending_review" && <p className="review-wait">Waiting for an admin or coordinator. You cannot accept your own request.</p>}
+                  {notice?.id === request.id && <p className="error">{notice.message}</p>}
+                </div>
               </article>
             ))}
           </div>

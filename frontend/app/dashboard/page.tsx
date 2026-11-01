@@ -153,7 +153,8 @@ export default function Home() {
       setStatus(response.error ?? "Request could not be submitted");
       return;
     }
-    setStatus(`Submitted for review · ${response.data.proposedDecision.status.replaceAll("_", " ")}: ${response.data.proposedDecision.reason}`);
+    const categoryName = bookingCategory.replaceAll("_", " ");
+    setStatus(`Submitted as ${categoryName} for review · ${response.data.proposedDecision.status.replaceAll("_", " ")}: ${response.data.proposedDecision.reason}`);
   }
 
   const roomChoices = [
@@ -228,6 +229,7 @@ export default function Home() {
                     <option value="guest_lecture">Guest lecture</option>
                     <option value="institute_event">Institute event</option>
                   </select>
+                  <small>A club can request an institute event, a guest lecture, a department event, or a club event. The category you choose is the one used. Higher categories are decided first.</small>
                 </label>
               </div>
               {limitNote && <p className="error">{limitNote}</p>}
