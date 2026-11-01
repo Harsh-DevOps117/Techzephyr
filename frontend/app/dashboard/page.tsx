@@ -45,7 +45,8 @@ export default function Home() {
   const [answer, setAnswer] = useState("");
   const [offerRequest, setOfferRequest] = useState(false);
   const [askBusy, setAskBusy] = useState(false);
-  const [prepared, setPrepared] = useState<{ draft: BookingDraft; date: string | null; scheduleVersionId: string; roomName: string } | null>(null);
+  const [prepared, setPrepared] = useState<{ draft: BookingDraft; date: string | null; scheduleVersionId: string; roomName: string; alternative: boolean } | null>(null);
+  const [aiAssistedBooking, setAiAssistedBooking] = useState(false);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [role, setRole] = useState("");
   const [overview, setOverview] = useState<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { id: string; hardViolations: number; softPenalty: number } | null } | null>(null);
@@ -81,6 +82,7 @@ export default function Home() {
   }, [draft, eventRooms]);
 
   function useManualForm() {
+    setAiAssistedBooking(false);
     setDraft({ attendance: null, duration_periods: null, windows: [{ day: "MON", from_period: 10, to_period: 11 }], room_types: ["seminar_hall"], needs: [], requested_room: null, mandatory_for_groups: [], assumptions: [], follow_up: null });
     setWindowDates([""]);
     setNeedsText("");
@@ -137,7 +139,7 @@ export default function Home() {
     setBusy(true);
     const response = await api<{ jobId?: string; status: string; booked?: boolean; clash?: string; proposedDecision: { status: string; reason: string } }>("/api/v1/booking-requests", {
       method: "POST",
-      body: JSON.stringify({ scheduleVersionId: bookingSchedule, title: bookingTitle.trim(), requestedCategory: bookingCategory, draft: { ...draft, needs, follow_up: null } }),
+      body: JSON.stringify({ scheduleVersionId: bookingSchedule, title: bookingTitle.trim(), requestedCategory: bookingCategory, draft: { ...draft, needs, follow_up: null }, aiAssisted: aiAssistedBooking }),
     });
     setBusy(false);
     if (!response.data) {
@@ -161,7 +163,7 @@ export default function Home() {
     setAskBusy(true);
     setOfferRequest(false);
     setPrepared(null);
-    const response = await api<{ reply: string; offerRequest: boolean; draft: BookingDraft | null; date: string | null; scheduleVersionId: string | null; room: { name: string } | null }>("/api/v1/ai/availability", {
+    const response = await api<{ reply: string; offerRequest: boolean; draft: BookingDraft | null; date: string | null; scheduleVersionId: string | null; room: { name: string } | null; alternative: { room: { name: string } } | null }>("/api/v1/ai/availability", {
       method: "POST",
       body: JSON.stringify({ text: question }),
     });
@@ -173,12 +175,13 @@ export default function Home() {
     setAnswer(response.data.reply);
     setOfferRequest(Boolean(response.data.offerRequest && response.data.draft && response.data.scheduleVersionId));
     if (response.data.offerRequest && response.data.draft && response.data.scheduleVersionId) {
-      setPrepared({ draft: response.data.draft, date: response.data.date, scheduleVersionId: response.data.scheduleVersionId, roomName: response.data.room?.name ?? "Venue" });
+      setPrepared({ draft: response.data.draft, date: response.data.date, scheduleVersionId: response.data.scheduleVersionId, roomName: response.data.alternative?.room.name ?? response.data.room?.name ?? "Venue", alternative: Boolean(response.data.alternative) });
     }
   }
 
   function startRequestFromAnswer() {
     if (!prepared) return;
+    setAiAssistedBooking(true);
     setDraft(prepared.draft);
     setWindowDates([prepared.date ?? ""]);
     setNeedsText((prepared.draft.needs ?? []).join(", "));
@@ -186,7 +189,7 @@ export default function Home() {
     setBookingTitle(`${prepared.roomName} request`);
     setBookingSchedule(prepared.scheduleVersionId);
     setBookingCategory(role === "faculty" ? "guest_lecture" : role === "department_coordinator" ? "department_event" : "club_event");
-    setStatus("The slot is free. Check the fields, then submit the request.");
+    setStatus(prepared.alternative ? "A conflict-free alternative is ready. Check the fields, then submit it for review." : "The slot is free. Check the fields, then submit the request.");
     setBookingOpen(true);
   }
 
