@@ -10,6 +10,20 @@ import { canOpen } from "../../lib/access";
 import { ArrowIcon, CalendarIcon, CheckIcon, MessageIcon, VenueIcon, WrenchIcon } from "../../components/ui/icons";
 
 type LiveItem = { session_id: string; day: string; start_period: number; room_id: string; courseId: string; kind: string; duration: number };
+const weekdays = ["MON", "TUE", "WED", "THU", "FRI"] as const;
+
+function weekdayFromDate(value: string) {
+  const date = new Date(`${value}T12:00:00`);
+  const name = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][date.getDay()];
+  return weekdays.find((day) => day === name) ?? null;
+}
+
+function atLeastOne(value: string) {
+  if (value.trim() === "") return null;
+  const number = Math.floor(Number(value));
+  if (!Number.isFinite(number) || number < 1) return undefined;
+  return number;
+}
 
 export default function Home() {
   const schedules = useApiList<ScheduleSummary>("/api/v1/schedules");
@@ -17,6 +31,8 @@ export default function Home() {
   const [request, setRequest] = useState("seminar hall kal shaam 6 baje, 2 ghante, 100 log, mic chahiye");
   const [status, setStatus] = useState("Describe a venue request in English or Hinglish.");
   const [draft, setDraft] = useState<BookingDraft | null>(null);
+  const [windowDates, setWindowDates] = useState<string[]>([]);
+  const [limitNote, setLimitNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [bookingTitle, setBookingTitle] = useState("Campus venue request");
   const [bookingSchedule, setBookingSchedule] = useState("");
@@ -66,12 +82,40 @@ export default function Home() {
       return;
     }
     setDraft(response.data.draft);
-    setStatus("Draft created — review every field before submission.");
+    setWindowDates(response.data.draft.windows.map(() => ""));
+    setLimitNote("");
+    setStatus("Draft created — set the date you want, then review every field before submission.");
   }
 
   function useManualForm() {
     setDraft({ attendance: null, duration_periods: null, windows: [{ day: "MON", from_period: 10, to_period: 11 }], room_types: ["seminar_hall"], needs: [], requested_room: null, mandatory_for_groups: [], assumptions: [], follow_up: null });
-    setStatus("Manual form opened. Fill every field before submitting.");
+    setWindowDates([""]);
+    setLimitNote("");
+    setStatus("Manual form opened. Choose your date, then fill every field before submitting.");
+  }
+
+  function setCount(field: "attendance" | "duration_periods", raw: string) {
+    if (!draft) return;
+    const next = atLeastOne(raw);
+    if (next === undefined) {
+      setLimitNote(field === "attendance" ? "Attendance cannot be negative or zero." : "Duration cannot be negative or zero.");
+      return;
+    }
+    setLimitNote("");
+    if (field === "duration_periods" && next !== null) {
+      const duration = Math.min(13, next);
+      const windows = draft.windows.map((window) => window.to_period - window.from_period + 1 >= duration ? window : { ...window, to_period: Math.min(13, window.from_period + duration - 1) });
+      setDraft({ ...draft, duration_periods: duration, windows });
+      return;
+    }
+    setDraft({ ...draft, attendance: next });
+  }
+
+  function updateWindow(index: number, patch: Partial<BookingDraft["windows"][number]>, date?: string) {
+    if (!draft) return;
+    const windows = draft.windows.map((window, item) => item === index ? { ...window, ...patch } : window);
+    setDraft({ ...draft, windows });
+    if (date !== undefined) setWindowDates(windowDates.map((item, itemIndex) => itemIndex === index ? date : item));
   }
 
   async function submitDraft() {
@@ -150,8 +194,8 @@ export default function Home() {
             <div className="draft-card">
               <div className="draft-head"><span><CheckIcon /> Draft ready</span><small>Not submitted</small></div>
               <div className="draft-fields">
-                <label>Attendance<input type="number" value={draft.attendance ?? ""} onChange={(event) => setDraft({ ...draft, attendance: event.target.value ? Number(event.target.value) : null })} /></label>
-                <label>Duration<input type="number" value={draft.duration_periods ?? ""} onChange={(event) => setDraft({ ...draft, duration_periods: event.target.value ? Number(event.target.value) : null })} /></label>
+                <label>Attendance<input type="number" min={1} step={1} value={draft.attendance ?? ""} onChange={(event) => setCount("attendance", event.target.value)} /></label>
+                <label>Duration in periods<input type="number" min={1} max={13} step={1} value={draft.duration_periods ?? ""} onChange={(event) => setCount("duration_periods", event.target.value)} /></label>
                 <label>Needs<input value={draft.needs.join(", ")} onChange={(event) => setDraft({ ...draft, needs: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} /></label>
                 <label>Request title<input value={bookingTitle} onChange={(event) => setBookingTitle(event.target.value)} /></label>
                 <label>Category
@@ -162,6 +206,39 @@ export default function Home() {
                     <option value="institute_event">Institute event</option>
                   </select>
                 </label>
+              </div>
+              {limitNote && <p className="error">{limitNote}</p>}
+              <div className="window-list">
+                <div className="picker-head"><span>Dates you want</span><small>Monday to Friday. Add another if the first day is only a preference.</small></div>
+                {draft.windows.map((window, index) => (
+                  <div className="window-row" key={`${window.day}-${index}`}>
+                    <label>Date<input type="date" value={windowDates[index] ?? ""} onChange={(event) => {
+                      const value = event.target.value;
+                      const day = value ? weekdayFromDate(value) : null;
+                      if (value && !day) {
+                        setLimitNote("Pick a Monday to Friday date. The campus week does not use Saturday or Sunday.");
+                        return;
+                      }
+                      setLimitNote("");
+                      updateWindow(index, day ? { day } : {}, value);
+                    }} /></label>
+                    <label>Day<select value={window.day} onChange={(event) => updateWindow(index, { day: event.target.value as BookingDraft["windows"][number]["day"] }, "")}>{weekdays.map((day) => <option key={day} value={day}>{day}</option>)}</select></label>
+                    <label>From period<input type="number" min={1} max={13} value={window.from_period} onChange={(event) => {
+                      const from = atLeastOne(event.target.value);
+                      if (from === undefined || from === null) { setLimitNote("A period cannot be negative or zero."); return; }
+                      setLimitNote("");
+                      updateWindow(index, { from_period: Math.min(13, from), to_period: Math.max(window.to_period, Math.min(13, from)) });
+                    }} /></label>
+                    <label>To period<input type="number" min={1} max={13} value={window.to_period} onChange={(event) => {
+                      const to = atLeastOne(event.target.value);
+                      if (to === undefined || to === null) { setLimitNote("A period cannot be negative or zero."); return; }
+                      setLimitNote("");
+                      updateWindow(index, { to_period: Math.max(window.from_period, Math.min(13, to)) });
+                    }} /></label>
+                    {draft.windows.length > 1 && <button type="button" className="ghost" onClick={() => { setDraft({ ...draft, windows: draft.windows.filter((_, item) => item !== index) }); setWindowDates(windowDates.filter((_, item) => item !== index)); }}>Remove</button>}
+                  </div>
+                ))}
+                {draft.windows.length < 5 && <button type="button" className="secondary" onClick={() => { setDraft({ ...draft, windows: [...draft.windows, { day: "FRI", from_period: 10, to_period: 11 }] }); setWindowDates([...windowDates, ""]); }}>Add another date</button>}
               </div>
               <PickerCards
                 label="Approved timetable"
