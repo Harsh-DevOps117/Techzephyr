@@ -76,10 +76,10 @@ export default function Home() {
     event.preventDefault();
     setBusy(true);
     setStatus("Reading your request…");
-    const response = await api<{ draft: BookingDraft }>("/api/v1/ai/booking-drafts", { method: "POST", body: JSON.stringify({ text: request }) });
+    const response = await api<{ draft: BookingDraft | null; message?: string }>("/api/v1/ai/booking-drafts", { method: "POST", body: JSON.stringify({ text: request }) });
     setBusy(false);
     if (!response.data?.draft) {
-      setStatus(response.error ?? "AI is unavailable. The manual venue form remains available.");
+      setStatus(response.data?.message ?? response.error ?? "AI is unavailable. The manual venue form remains available.");
       return;
     }
     setDraft(response.data.draft);

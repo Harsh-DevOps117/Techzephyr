@@ -4,7 +4,7 @@
 
 The backend calls Groq through its OpenAI-compatible interface. The model is configured by `GROQ_MODEL`; its credential is supplied only at runtime in `GROQ_API_KEY` and is never committed.
 
-The AI layer translates English or Hinglish venue requests into editable booking drafts and can explain computed decisions. The product prompt is in `src/application/ai/booking-request-parser.ts`.
+The AI layer translates English or Hinglish venue requests into editable booking drafts. Explanations of placements and booking decisions are read from the stored deterministic result (`/api/v1/ai/explain` and `/api/v1/schedules/:id/explanations/:sessionId`). The product prompt is in `src/application/ai/booking-request-parser.ts`. If Groq is missing or fails, those routes answer with a clear message and the manual form stays available. They do not return HTTP 503.
 
 The AI is not allowed to approve or reject requests, determine category priority, select an unvalidated room/time, bypass permissions, validate schedules, or apply changes. The deterministic validator and role-based approval workflow remain authoritative. If AI is unavailable, manual booking remains available.
 
