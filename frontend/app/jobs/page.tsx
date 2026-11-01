@@ -70,11 +70,13 @@ export default function Jobs() {
           {job && (
             <div className="job-card">
               <div className="job-top"><span className={`job-status ${job.status}`}>{job.status.replaceAll("_", " ")}</span></div>
-              <h3>{job.type.replaceAll("_", " ")}</h3>
+              <h3>{job.result?.title || job.type.replaceAll("_", " ")}</h3>
+              {job.result?.status && <p className="job-result">{job.result.status.replaceAll("_", " ")}{job.result.room ? ` · ${job.result.room}` : ""}{job.result.day ? ` · ${job.result.day}` : ""}</p>}
+              {job.result?.reason && <p>{job.result.reason}</p>}
               <div className="job-meta">
                 <div><span>Attempts</span><strong>{job.attempt_count}</strong></div>
                 <div><span>Priority</span><strong>{job.priority}</strong></div>
-                <div><span>Created</span><strong>{new Date(job.created_at).toLocaleString()}</strong></div>
+                <div><span>Created</span><strong>{new Date(job.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</strong></div>
               </div>
               {job.error && <Feedback tone="error" title="The operation failed">{job.error}</Feedback>}
             </div>

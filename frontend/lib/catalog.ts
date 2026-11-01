@@ -150,13 +150,21 @@ export function scheduleCards(items: ScheduleSummary[]): PickerItem[] {
   });
 }
 
+const jobNames: Record<string, string> = {
+  DECIDE_BOOKINGS: "Venue request",
+  GENERATE_SCHEDULE: "Generate week",
+  REPAIR_SCHEDULE: "Repair week",
+  VALIDATE_SCHEDULE: "Validate week",
+  EXPORT_SCHEDULE: "Export week",
+};
+
 export function jobCards(items: JobSummary[]): PickerItem[] {
   return items.map((item) => ({
     id: item.id,
-    title: item.type.replaceAll("_", " "),
+    title: jobNames[item.type] ?? item.type.replaceAll("_", " "),
     status: item.status.replaceAll("_", " "),
-    description: item.error || "Background scheduling work",
-    meta: `Priority ${item.priority} · ${item.attempt_count} attempt${item.attempt_count === 1 ? "" : "s"} · ${formatWhen(item.created_at)}`,
+    description: item.error || "Open the card to read the result",
+    meta: `${formatWhen(item.created_at)}`,
   }));
 }
 

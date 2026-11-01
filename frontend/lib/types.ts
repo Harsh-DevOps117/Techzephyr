@@ -28,6 +28,7 @@ export type Job = {
   created_at: string;
   started_at?: string | null;
   completed_at?: string | null;
+  result?: { title?: string; status?: string; reason?: string; requestId?: string; room?: string | null; day?: string | null } | null;
 };
 
 export type DatasetFile = {

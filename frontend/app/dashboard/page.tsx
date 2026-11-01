@@ -35,6 +35,7 @@ export default function Home() {
   const [needsText, setNeedsText] = useState("");
   const [limitNote, setLimitNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [requestJob, setRequestJob] = useState("");
   const [bookingTitle, setBookingTitle] = useState("Campus venue request");
   const [bookingSchedule, setBookingSchedule] = useState("");
   const [bookingCategory, setBookingCategory] = useState("club_event");
@@ -133,7 +134,7 @@ export default function Home() {
     }
     const needs = needsText.split(",").map((item) => item.trim()).filter(Boolean);
     setBusy(true);
-    const response = await api<{ status: string; booked?: boolean; clash?: string; proposedDecision: { status: string; reason: string } }>("/api/v1/booking-requests", {
+    const response = await api<{ jobId?: string; status: string; booked?: boolean; clash?: string; proposedDecision: { status: string; reason: string } }>("/api/v1/booking-requests", {
       method: "POST",
       body: JSON.stringify({ scheduleVersionId: bookingSchedule, title: bookingTitle.trim(), requestedCategory: bookingCategory, draft: { ...draft, needs, follow_up: null } }),
     });
@@ -143,6 +144,7 @@ export default function Home() {
       return;
     }
     const decision = response.data.proposedDecision;
+    setRequestJob(response.data.jobId ?? "");
     if (response.data.booked) setStatus(`Booked. ${decision.reason}`);
     else if (response.data.clash) setStatus(`Clash. ${response.data.clash}`);
     else setStatus(`Submitted as ${bookingCategory.replaceAll("_", " ")} for review · ${decision.status.replaceAll("_", " ")}: ${decision.reason}`);
@@ -289,6 +291,11 @@ export default function Home() {
               <button type="button" className="ghost" onClick={() => setBookingOpen(false)}>Close</button>
             </div>
             <p className="lede">{role === "admin" ? "An admin booking is applied immediately. A clash is reported here and is not sent for review." : "Fill the first fields. The next section appears when they are complete."}</p>
+            <div className="fog-steps">
+              <span className="on">1 Details</span>
+              <span className={basicsReady ? "on" : ""}>2 Dates</span>
+              <span className={datesReady ? "on" : ""}>3 Timetable</span>
+            </div>
             <div className="draft-fields">
               <label>Request title<input value={bookingTitle} onChange={(event) => setBookingTitle(event.target.value)} /></label>
               <label>Category
@@ -372,7 +379,9 @@ export default function Home() {
             {limitNote && <p className="error">{limitNote}</p>}
             {status.startsWith("Clash") && <Feedback tone="error" title="This time clashes">{status.replace(/^Clash\.\s*/, "")}</Feedback>}
             {status.startsWith("Booked") && <Feedback tone="success" title="Venue booked">{status.replace(/^Booked\.\s*/, "")}</Feedback>}
-            {!status.startsWith("Clash") && !status.startsWith("Booked") && status && <p className="helper-text">{status}</p>}
+            {!status.startsWith("Clash") && !status.startsWith("Booked") && status.startsWith("Submitted") && <Feedback tone="success" title="Request recorded">{status}</Feedback>}
+            {!status.startsWith("Clash") && !status.startsWith("Booked") && !status.startsWith("Submitted") && status && <p className="helper-text">{status}</p>}
+            {requestJob && <p className="helper-text"><Link href={`/jobs?id=${requestJob}`}>Open the request job</Link></p>}
           </div>
         </div>
       )}
