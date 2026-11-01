@@ -101,7 +101,7 @@ export default function Schedule() {
 
   return (
     <main className="route">
-      <StepHeader eyebrow="ADMIN · TIMETABLE" title="Generate and inspect the timetable" copy="Choose an imported dataset, schedule every session, then open a timetable by group, faculty or room." />
+      <StepHeader eyebrow="ADMIN · TIMETABLE" title="Generate the timetable" copy="Choose an imported dataset, schedule every session, then open a timetable by group, faculty or room." />
       <section className="form-layout">
         <div className="form-card">
           <div className="section-title"><span className="card-icon coral"><CalendarIcon /></span><div><h2>Generation input</h2><p>Start from an imported dataset. Select it below.</p></div></div>
@@ -127,12 +127,12 @@ export default function Schedule() {
         </div>
         <aside className="info-card">
           <p className="eyebrow">VALIDATION PIPELINE</p>
-          <div className="pipeline">
-            <span className="done">1</span><div><strong>Place sessions</strong><small>Hard constraints first</small></div><i />
-            <span>2</span><div><strong>Optimise</strong><small>Reduce soft penalties</small></div><i />
-            <span>3</span><div><strong>Official validator</strong><small>Must report zero hard violations</small></div><i />
-            <span>4</span><div><strong>Admin approval</strong><small>Required before publishing</small></div>
-          </div>
+          <ol className="pipeline">
+            <li className="done"><b>1</b><div><strong>Place sessions</strong><small>Hard constraints first</small></div></li>
+            <li><b>2</b><div><strong>Optimise</strong><small>Reduce soft penalties</small></div></li>
+            <li><b>3</b><div><strong>Official validator</strong><small>Zero hard violations required</small></div></li>
+            <li><b>4</b><div><strong>Admin approval</strong><small>A second admin publishes the week</small></div></li>
+          </ol>
         </aside>
       </section>
       <section className="form-card timetable-browser">

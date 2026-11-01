@@ -80,7 +80,7 @@ export default function Repair() {
 
   return (
     <main className="route">
-      <StepHeader eyebrow="ADMIN · SCHEDULE CHANGES" title="Repair a disrupted timetable" copy="Pick the approved timetable, describe a change or upload the official format. The engine moves as few sessions as possible." />
+      <StepHeader eyebrow="ADMIN · SCHEDULE CHANGES" title="Repair the timetable" copy="Pick the approved timetable, describe a change or upload the official format. The engine moves as few sessions as possible." />
       <section className="form-layout">
         <div className="form-card">
           <div className="section-title"><span className="card-icon violet"><WrenchIcon /></span><div><h2>Repair inputs</h2><p>Changes are proposed first and never applied automatically.</p></div></div>

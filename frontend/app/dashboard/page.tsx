@@ -7,7 +7,8 @@ import type { BookingDraft } from "../../lib/types";
 import { roomCards, scheduleCards, useApiList, useCatalog, type ScheduleSummary } from "../../lib/catalog";
 import { PickerCards } from "../../components/smart/picker-cards";
 import { canOpen } from "../../lib/access";
-import { ArrowIcon, CalendarIcon, CheckIcon, MessageIcon, VenueIcon, WrenchIcon } from "../../components/ui/icons";
+import { Feedback } from "../../components/ui/feedback";
+import { ArrowIcon, CalendarIcon, CheckIcon, VenueIcon, WrenchIcon } from "../../components/ui/icons";
 
 type LiveItem = { session_id: string; day: string; start_period: number; room_id: string; courseId: string; kind: string; duration: number };
 const weekdays = ["MON", "TUE", "WED", "THU", "FRI"] as const;
@@ -38,6 +39,7 @@ export default function Home() {
   const [bookingTitle, setBookingTitle] = useState("Campus venue request");
   const [bookingSchedule, setBookingSchedule] = useState("");
   const [bookingCategory, setBookingCategory] = useState("club_event");
+  const [bookingOpen, setBookingOpen] = useState(false);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [role, setRole] = useState("");
   const [overview, setOverview] = useState<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { id: string; hardViolations: number; softPenalty: number } | null } | null>(null);
@@ -61,7 +63,7 @@ export default function Home() {
       return;
     }
     api<{ items: LiveItem[] }>(`/api/v1/schedules/${scheduleId}/timetable`).then((response) => {
-      if (response.data) setLiveItems(response.data.items.slice(0, 8));
+      if (response.data) setLiveItems(response.data.items);
     });
   }, [overview?.latestSchedule?.id]);
 
@@ -144,7 +146,7 @@ export default function Home() {
     }
     const needs = needsText.split(",").map((item) => item.trim()).filter(Boolean);
     setBusy(true);
-    const response = await api<{ status: string; proposedDecision: { status: string; reason: string } }>("/api/v1/booking-requests", {
+    const response = await api<{ status: string; booked?: boolean; clash?: string; proposedDecision: { status: string; reason: string } }>("/api/v1/booking-requests", {
       method: "POST",
       body: JSON.stringify({ scheduleVersionId: bookingSchedule, title: bookingTitle.trim(), requestedCategory: bookingCategory, draft: { ...draft, needs, follow_up: null } }),
     });
@@ -153,24 +155,40 @@ export default function Home() {
       setStatus(response.error ?? "Request could not be submitted");
       return;
     }
-    const categoryName = bookingCategory.replaceAll("_", " ");
-    setStatus(`Submitted as ${categoryName} for review · ${response.data.proposedDecision.status.replaceAll("_", " ")}: ${response.data.proposedDecision.reason}`);
+    const decision = response.data.proposedDecision;
+    if (response.data.booked) setStatus(`Booked. ${decision.reason}`);
+    else if (response.data.clash) setStatus(`Clash. ${response.data.clash}`);
+    else setStatus(`Submitted as ${bookingCategory.replaceAll("_", " ")} for review · ${decision.status.replaceAll("_", " ")}: ${decision.reason}`);
+  }
+
+  function openBooking() {
+    if (!draft) useManualForm();
+    setBookingOpen(true);
   }
 
   const roomChoices = [
     { id: "", title: "Any suitable room", description: "Let the rules pick a venue that fits", meta: "No preference" },
     ...roomCards(eventRooms),
   ];
+  const basicsReady = Boolean(draft && bookingTitle.trim().length >= 3 && (draft.attendance ?? 0) >= 1 && (draft.duration_periods ?? 0) >= 1);
+  const datesReady = Boolean(basicsReady && draft && draft.windows.every((window) => window.from_period >= 1 && window.to_period >= window.from_period && window.to_period <= 13 && window.to_period - window.from_period + 1 >= (draft.duration_periods ?? 1)));
+  const week = weekdays.map((day) => ({
+    day,
+    items: liveItems.filter((item) => item.day === day).sort((a, b) => a.start_period - b.start_period),
+  }));
 
   return (
     <main className="dashboard">
       <header className="topline">
         <div>
           <p className="eyebrow">CAMPUS CONTROL CENTRE</p>
-          <h1>What should happen next.</h1>
-          <p>Follow the four steps. Each screen tells you the one card to click.</p>
+          <h1>Campus workspace</h1>
+          <p>The published week is below. Book a venue when you need a room.</p>
         </div>
-        <div className={`api-state ${apiOnline === false ? "offline" : ""}`}><i />{apiOnline === null ? "Checking services" : apiOnline ? "All services operational" : "API unavailable"}</div>
+        <div className="topline-actions">
+          <button className="primary" type="button" onClick={openBooking}>Book a venue</button>
+          <div className={`api-state ${apiOnline === false ? "offline" : ""}`}><i />{apiOnline === null ? "Checking services" : apiOnline ? "All services operational" : "API unavailable"}</div>
+        </div>
       </header>
       <ol className="step-rail">
         {([
@@ -193,105 +211,126 @@ export default function Home() {
         {(!role || canOpen(role, "/repair")) && <article className="attention"><span className="card-icon violet"><WrenchIcon /></span><div><small>CHANGES</small><strong>Repair safely</strong><p>Upload disruptions and review every move.</p></div><Link href="/repair">Plan a repair <ArrowIcon /></Link></article>}
         <article className="attention"><span className="card-icon mint"><VenueIcon /></span><div><small>SPECTRA WEEK</small><strong>{overview ? `${overview.counts.bookingRequests} requests` : "No requests yet"}</strong><p>{overview?.pendingApprovals ?? 0} validated proposals await approval.</p></div><Link href="/bookings">Review requests <ArrowIcon /></Link></article>
       </section>
-      <section className="dashboard-grid">
-        <article className="panel timetable-panel">
-          <div className="panel-title"><div><p className="eyebrow">TIMETABLE PREVIEW</p><h2>{liveItems.length ? "Latest generated week" : "No live timetable yet"}</h2></div><Link href="/schedule">Full timetable <ArrowIcon /></Link></div>
-          {liveItems.length === 0 ? <p className="lede">Generate a week and this list fills from that schedule. Nothing here is sample data.</p> : (
-            <div className="schedule-table">
-              <div className="table-head"><span>When</span><span>Course</span><span>Kind</span><span>Room</span></div>
-              {liveItems.map((item) => (
-                <div key={item.session_id}><span>{item.day} · P{item.start_period}</span><span>{item.courseId}</span><span>{item.kind}</span><span>{item.room_id}</span></div>
-              ))}
-            </div>
-          )}
-        </article>
-        <article className="panel assistant-panel">
-          <div className="assistant-title"><span className="card-icon coral"><MessageIcon /></span><div><p className="eyebrow">REQUEST ASSISTANT</p><h2>Book a venue naturally</h2></div></div>
-          <p>Tell us what you need. AI fills the form; deterministic rules decide availability.</p>
-          <form onSubmit={parse}>
-            <label>Your request<textarea value={request} onChange={(event) => setRequest(event.target.value)} /></label>
-            <button className="primary" disabled={busy}>{busy ? "Creating draft…" : "Create editable draft"}<ArrowIcon /></button>
-            <button type="button" className="secondary manual-fallback" onClick={useManualForm}>Use manual form</button>
-          </form>
-          <p className="helper-text">{status}</p>
-          {draft && (
-            <div className="draft-card">
-              <div className="draft-head"><span><CheckIcon /> Draft ready</span><small>Not submitted</small></div>
-              <div className="draft-fields">
-                <label>Attendance<input type="number" min={1} step={1} value={draft.attendance ?? ""} onChange={(event) => setCount("attendance", event.target.value)} /></label>
-                <label>Duration in periods<input type="number" min={1} max={13} step={1} value={draft.duration_periods ?? ""} onChange={(event) => setCount("duration_periods", event.target.value)} /></label>
-                <label>Requirements<input value={needsText} placeholder="mic, projector, stage" onChange={(event) => { setNeedsText(event.target.value); setDraft({ ...draft, follow_up: null }); setLimitNote(""); }} /></label>
-                <label>Request title<input value={bookingTitle} onChange={(event) => setBookingTitle(event.target.value)} /></label>
-                <label>Category
-                  <select value={bookingCategory} onChange={(event) => setBookingCategory(event.target.value)}>
-                    <option value="club_event">Club event</option>
-                    <option value="department_event">Department event</option>
-                    <option value="guest_lecture">Guest lecture</option>
-                    <option value="institute_event">Institute event</option>
-                  </select>
-                  <small>A club can request an institute event, a guest lecture, a department event, or a club event. The category you choose is the one used. Higher categories are decided first.</small>
-                </label>
-              </div>
-              {limitNote && <p className="error">{limitNote}</p>}
-              <div className="window-list">
-                <div className="picker-head"><span>Dates you want</span><small>Monday to Friday. Add another if the first day is only a preference.</small></div>
-                {draft.windows.map((window, index) => (
-                  <div className="window-row" key={`${window.day}-${index}`}>
-                    <label>Date<input type="date" value={windowDates[index] ?? ""} onChange={(event) => {
-                      const value = event.target.value;
-                      const day = value ? weekdayFromDate(value) : null;
-                      if (value && !day) {
-                        setLimitNote("Pick a Monday to Friday date. The campus week does not use Saturday or Sunday.");
-                        return;
-                      }
-                      setLimitNote("");
-                      updateWindow(index, day ? { day } : {}, value);
-                    }} /></label>
-                    <label>Day<select value={window.day} onChange={(event) => updateWindow(index, { day: event.target.value as BookingDraft["windows"][number]["day"] }, "")}>{weekdays.map((day) => <option key={day} value={day}>{day}</option>)}</select></label>
-                    <label>From period<input type="number" min={1} max={13} value={window.from_period} onChange={(event) => {
-                      const from = atLeastOne(event.target.value);
-                      if (from === undefined || from === null) { setLimitNote("A period cannot be negative or zero."); return; }
-                      setLimitNote("");
-                      updateWindow(index, { from_period: Math.min(13, from), to_period: Math.max(window.to_period, Math.min(13, from)) });
-                    }} /></label>
-                    <label>To period<input type="number" min={1} max={13} value={window.to_period} onChange={(event) => {
-                      const to = atLeastOne(event.target.value);
-                      if (to === undefined || to === null) { setLimitNote("A period cannot be negative or zero."); return; }
-                      setLimitNote("");
-                      updateWindow(index, { to_period: Math.max(window.from_period, Math.min(13, to)) });
-                    }} /></label>
-                    {draft.windows.length > 1 && <button type="button" className="ghost" onClick={() => { setDraft({ ...draft, windows: draft.windows.filter((_, item) => item !== index) }); setWindowDates(windowDates.filter((_, item) => item !== index)); }}>Remove</button>}
+      <section className="panel week-panel">
+        <div className="panel-title"><div><p className="eyebrow">TIMETABLE PREVIEW</p><h2>{liveItems.length ? "Latest generated week" : "No live timetable yet"}</h2></div><Link href="/schedule">Full timetable <ArrowIcon /></Link></div>
+        {liveItems.length === 0 ? <p className="lede">Generate a week and these columns fill from that schedule.</p> : (
+          <div className="week-board">
+            {week.map((column) => (
+              <section key={column.day}>
+                <h3>{column.day}</h3>
+                {column.items.slice(0, 6).map((item) => (
+                  <div className={`week-chip ${item.kind}`} key={item.session_id}>
+                    <b>P{item.start_period}</b>
+                    <span>{item.courseId}</span>
+                    <small>{item.room_id}</small>
                   </div>
                 ))}
-                {draft.windows.length < 5 && <button type="button" className="secondary" onClick={() => { setDraft({ ...draft, windows: [...draft.windows, { day: "FRI", from_period: 10, to_period: 11 }] }); setWindowDates([...windowDates, ""]); }}>Add another date</button>}
-              </div>
-              <PickerCards
-                label="Approved timetable"
-                hint="The request is checked against this published schedule"
-                items={scheduleCards(approved)}
-                selectedId={bookingSchedule}
-                onSelect={setBookingSchedule}
-                loading={schedules.loading}
-                error={schedules.error}
-                empty="Approve a timetable before submitting a venue request."
-              />
-              {bookingSchedule && (
-                <PickerCards
-                  label="Preferred room"
-                  hint="Optional. Any suitable room leaves the choice to the rules."
-                  items={roomChoices}
-                  selectedId={draft.requested_room ?? ""}
-                  onSelect={(id) => setDraft({ ...draft, requested_room: id || null })}
-                  loading={catalog.loading}
-                  error={catalog.error}
-                  empty="This timetable has no event rooms."
-                />
-              )}
-              <button type="button" className="primary wide" disabled={busy} onClick={submitDraft}>{busy ? "Submitting…" : "Submit for deterministic review"}<ArrowIcon /></button>
-            </div>
-          )}
-        </article>
+                {column.items.length > 6 && <small className="week-more">+{column.items.length - 6} more</small>}
+                {column.items.length === 0 && <small className="week-more">No sessions</small>}
+              </section>
+            ))}
+          </div>
+        )}
       </section>
+      {bookingOpen && draft && (
+        <div className="fog" onClick={() => setBookingOpen(false)}>
+          <div className="fog-card" role="dialog" aria-modal="true" aria-labelledby="book-venue-title" onClick={(event) => event.stopPropagation()}>
+            <div className="fog-head">
+              <div><p className="eyebrow">VENUE</p><h2 id="book-venue-title">Book a venue</h2></div>
+              <button type="button" className="ghost" onClick={() => setBookingOpen(false)}>Close</button>
+            </div>
+            <p className="lede">{role === "admin" ? "An admin booking is applied immediately. A clash is reported here and is not sent for review." : "Fill the first fields. The next section appears when they are complete."}</p>
+            <form onSubmit={parse}>
+              <label>Describe it<textarea value={request} onChange={(event) => setRequest(event.target.value)} /></label>
+              <button className="secondary" disabled={busy}>{busy ? "Reading…" : "Fill from this sentence"}</button>
+            </form>
+            <div className="draft-fields">
+              <label>Request title<input value={bookingTitle} onChange={(event) => setBookingTitle(event.target.value)} /></label>
+              <label>Category
+                <select value={bookingCategory} onChange={(event) => setBookingCategory(event.target.value)}>
+                  <option value="club_event">Club event</option>
+                  <option value="department_event">Department event</option>
+                  <option value="guest_lecture">Guest lecture</option>
+                  <option value="institute_event">Institute event</option>
+                </select>
+                <small>A club can request an institute event, a guest lecture, a department event, or a club event. The category you choose is the one used.</small>
+              </label>
+              <label>Attendance<input type="number" min={1} step={1} value={draft.attendance ?? ""} onChange={(event) => setCount("attendance", event.target.value)} /></label>
+              <label>Duration in periods<input type="number" min={1} max={13} step={1} value={draft.duration_periods ?? ""} onChange={(event) => setCount("duration_periods", event.target.value)} /></label>
+              <label>Requirements<input value={needsText} placeholder="mic, projector, stage" onChange={(event) => { setNeedsText(event.target.value); setDraft({ ...draft, follow_up: null }); setLimitNote(""); }} /></label>
+            </div>
+            {basicsReady && (
+              <div className="fog-next">
+                <p className="eyebrow">Next</p>
+                <h3>Dates you want</h3>
+                <div className="window-list">
+                  {draft.windows.map((window, index) => (
+                    <div className="window-row" key={`${window.day}-${index}`}>
+                      <label>Date<input type="date" value={windowDates[index] ?? ""} onChange={(event) => {
+                        const value = event.target.value;
+                        const day = value ? weekdayFromDate(value) : null;
+                        if (value && !day) {
+                          setLimitNote("Pick a Monday to Friday date. The campus week does not use Saturday or Sunday.");
+                          return;
+                        }
+                        setLimitNote("");
+                        updateWindow(index, day ? { day } : {}, value);
+                      }} /></label>
+                      <label>Day<select value={window.day} onChange={(event) => updateWindow(index, { day: event.target.value as BookingDraft["windows"][number]["day"] }, "")}>{weekdays.map((day) => <option key={day} value={day}>{day}</option>)}</select></label>
+                      <label>From period<input type="number" min={1} max={13} value={window.from_period} onChange={(event) => {
+                        const from = atLeastOne(event.target.value);
+                        if (from === undefined || from === null) { setLimitNote("A period cannot be negative or zero."); return; }
+                        setLimitNote("");
+                        updateWindow(index, { from_period: Math.min(13, from), to_period: Math.max(window.to_period, Math.min(13, from)) });
+                      }} /></label>
+                      <label>To period<input type="number" min={1} max={13} value={window.to_period} onChange={(event) => {
+                        const to = atLeastOne(event.target.value);
+                        if (to === undefined || to === null) { setLimitNote("A period cannot be negative or zero."); return; }
+                        setLimitNote("");
+                        updateWindow(index, { to_period: Math.max(window.from_period, Math.min(13, to)) });
+                      }} /></label>
+                      {draft.windows.length > 1 && <button type="button" className="ghost" onClick={() => { setDraft({ ...draft, windows: draft.windows.filter((_, item) => item !== index) }); setWindowDates(windowDates.filter((_, item) => item !== index)); }}>Remove</button>}
+                    </div>
+                  ))}
+                  {draft.windows.length < 5 && <button type="button" className="secondary" onClick={() => { setDraft({ ...draft, windows: [...draft.windows, { day: "FRI", from_period: 10, to_period: 11 }] }); setWindowDates([...windowDates, ""]); }}>Add another date</button>}
+                </div>
+              </div>
+            )}
+            {datesReady && (
+              <div className="fog-next">
+                <p className="eyebrow">Next</p>
+                <PickerCards
+                  label="Approved timetable"
+                  hint="The request is checked against this published schedule"
+                  items={scheduleCards(approved)}
+                  selectedId={bookingSchedule}
+                  onSelect={setBookingSchedule}
+                  loading={schedules.loading}
+                  error={schedules.error}
+                  empty="Approve a timetable before booking a venue."
+                />
+                {bookingSchedule && (
+                  <PickerCards
+                    label="Preferred room"
+                    hint="Optional. Any suitable room leaves the choice to the rules."
+                    items={roomChoices}
+                    selectedId={draft.requested_room ?? ""}
+                    onSelect={(id) => setDraft({ ...draft, requested_room: id || null })}
+                    loading={catalog.loading}
+                    error={catalog.error}
+                    empty="This timetable has no event rooms."
+                  />
+                )}
+                <button type="button" className="primary wide" disabled={busy || !bookingSchedule} onClick={submitDraft}>{busy ? "Checking the week…" : role === "admin" ? "Book this venue" : "Submit for review"}<ArrowIcon /></button>
+              </div>
+            )}
+            {limitNote && <p className="error">{limitNote}</p>}
+            {status.startsWith("Clash") && <Feedback tone="error" title="This time clashes">{status.replace(/^Clash\.\s*/, "")}</Feedback>}
+            {status.startsWith("Booked") && <Feedback tone="success" title="Venue booked">{status.replace(/^Booked\.\s*/, "")}</Feedback>}
+            {!status.startsWith("Clash") && !status.startsWith("Booked") && status && <p className="helper-text">{status}</p>}
+          </div>
+        </div>
+      )}
       <section className="trust-strip">
         <span><CheckIcon /> AI never approves a booking</span>
         <span><CheckIcon /> Every proposal is code-validated</span>
