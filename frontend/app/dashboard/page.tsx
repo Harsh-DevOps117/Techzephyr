@@ -8,7 +8,7 @@ import { roomCards, scheduleCards, useApiList, useCatalog, type ScheduleSummary 
 import { PickerCards } from "../../components/smart/picker-cards";
 import { canOpen } from "../../lib/access";
 import { Feedback } from "../../components/ui/feedback";
-import { ArrowIcon, CalendarIcon, CheckIcon, VenueIcon, WrenchIcon } from "../../components/ui/icons";
+import { ArrowIcon, CalendarIcon, CheckIcon, CloseIcon, MessageIcon, VenueIcon, WrenchIcon } from "../../components/ui/icons";
 
 type LiveItem = { session_id: string; day: string; start_period: number; room_id: string; courseId: string; kind: string; duration: number };
 const weekdays = ["MON", "TUE", "WED", "THU", "FRI"] as const;
@@ -40,6 +40,7 @@ export default function Home() {
   const [bookingSchedule, setBookingSchedule] = useState("");
   const [bookingCategory, setBookingCategory] = useState("club_event");
   const [bookingOpen, setBookingOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [question, setQuestion] = useState("kya 3 Nov ko auditorium 6 baje khali hai?");
   const [answer, setAnswer] = useState("");
   const [offerRequest, setOfferRequest] = useState(false);
@@ -231,37 +232,38 @@ export default function Home() {
       </ol>
       <section className="action-row">
         <Link className="action-card" href="/schedule">
-          <CalendarIcon />
-          <strong>{overview ? overview.counts.sessions : "—"}</strong>
-          <span>Sessions</span>
-          <small>{overview?.latestSchedule ? `${overview.latestSchedule.hardViolations} hard conflicts` : "Open the timetable"}</small>
+          <span className="action-icon"><CalendarIcon /></span>
+          <span className="action-copy"><strong>{overview ? overview.counts.sessions : "—"}</strong><span>Sessions</span><small>{overview?.latestSchedule ? `${overview.latestSchedule.hardViolations} hard conflicts` : "Open the timetable"}</small></span>
         </Link>
         {(!role || canOpen(role, "/repair")) && (
           <Link className="action-card" href="/repair">
-            <WrenchIcon />
-            <strong className="action-title">Repair safely</strong>
-            <span>Changes</span>
-            <small>Review every move before it is published</small>
+            <span className="action-icon"><WrenchIcon /></span>
+            <span className="action-copy"><strong className="action-title">Repair safely</strong><span>Changes</span><small>Review every move</small></span>
           </Link>
         )}
         <Link className="action-card" href="/bookings">
-          <VenueIcon />
-          <strong>{overview ? overview.counts.bookingRequests : "—"}</strong>
-          <span>Requests</span>
-          <small>{overview ? `${overview.pendingApprovals} waiting for approval` : "Open venue requests"}</small>
+          <span className="action-icon"><VenueIcon /></span>
+          <span className="action-copy"><strong>{overview ? overview.counts.bookingRequests : "—"}</strong><span>Requests</span><small>{overview ? `${overview.pendingApprovals} waiting` : "Open requests"}</small></span>
         </Link>
       </section>
-      <section className="panel ask-panel">
-        <div className="panel-title"><div><p className="eyebrow">AVAILABILITY</p><h2>Is this room free?</h2></div></div>
-        <p className="lede">Ask in English or Hinglish. The timetable decides. The model only reads the question.</p>
-        <form onSubmit={askAvailability}>
-          <label className="sr-only" htmlFor="availability-question">Question</label>
-          <input id="availability-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="kya 3 Nov ko auditorium 6 baje khali hai?" />
-          <button className="primary" type="submit" disabled={askBusy || question.trim().length < 3}>{askBusy ? "Checking…" : "Ask"}</button>
-        </form>
-        {answer && <p className="ask-reply">{answer}</p>}
-        {offerRequest && <button type="button" className="secondary" onClick={startRequestFromAnswer}>Make this request</button>}
-      </section>
+      <div className="ai-dock">
+        {chatOpen && (
+          <section className="ai-panel" role="dialog" aria-label="Ask the assistant">
+            <div className="ai-panel-head"><p className="eyebrow">ASSISTANT</p><h2>Is this room free?</h2></div>
+            <p>Ask in English or Hinglish. The timetable decides.</p>
+            <form onSubmit={askAvailability}>
+              <label className="sr-only" htmlFor="availability-question">Question</label>
+              <textarea id="availability-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="kya 3 Nov ko auditorium 6 baje khali hai?" />
+              <button className="primary" type="submit" disabled={askBusy || question.trim().length < 3}>{askBusy ? "Checking…" : "Ask"}</button>
+            </form>
+            {answer && <p className="ask-reply">{answer}</p>}
+            {offerRequest && <button type="button" className="secondary" onClick={() => { startRequestFromAnswer(); setChatOpen(false); }}>Make this request</button>}
+          </section>
+        )}
+        <button type="button" className="ai-launcher" aria-expanded={chatOpen} aria-label={chatOpen ? "Close assistant" : "Talk to the assistant"} onClick={() => setChatOpen((open) => !open)}>
+          {chatOpen ? <CloseIcon /> : <MessageIcon />}
+        </button>
+      </div>
       <section className="panel week-panel">
         <div className="panel-title"><div><p className="eyebrow">TIMETABLE PREVIEW</p><h2>{liveItems.length ? "Latest generated week" : "No live timetable yet"}</h2></div><Link href="/schedule">Full timetable <ArrowIcon /></Link></div>
         {liveItems.length === 0 ? <p className="lede">Generate a week and these columns fill from that schedule.</p> : (
