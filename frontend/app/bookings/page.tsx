@@ -72,7 +72,7 @@ export default function Bookings() {
 
   return (
     <main className="route">
-      <StepHeader eyebrow="SPECTRA · VENUE REQUESTS" title="Decide bookings by rule, not guesswork" copy="Approve, reject or offer an alternative for every request, with a human-readable reason." />
+      <StepHeader eyebrow="SPECTRA · VENUE REQUESTS" title="Decide venue requests" copy="Approve, reject or offer an alternative for every request, with a human-readable reason." />
       <section className="form-layout">
         <div className="form-card">
           <div className="section-title"><span className="card-icon mint"><VenueIcon /></span><div><h2>Run dataset decisions</h2><p>Choose a validated timetable so classes remain protected.</p></div></div>

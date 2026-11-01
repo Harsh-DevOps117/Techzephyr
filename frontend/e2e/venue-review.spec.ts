@@ -24,7 +24,7 @@ async function token(page: import("@playwright/test").Page) {
 test("club category is kept and venues can accept or reject", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page, "club@cit.local");
-  await page.getByRole("button", { name: /use manual form/i }).click();
+  await page.getByRole("button", { name: /book a venue/i }).click();
   await expect(page.getByText(/A club can request an institute event/i)).toBeVisible();
   const category = page.locator("select").filter({ has: page.locator('option[value="institute_event"]') });
   await category.selectOption("institute_event");

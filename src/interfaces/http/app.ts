@@ -586,9 +586,18 @@ export function createApp() {
         return [{ room_id: decision.room_id, day: decision.day as Day, start_period: decision.start_period, end_period: decision.end_period }];
       });
       const proposed = decideBookings(data, found.rows[0].objective.export?.sessions ?? [], held).find((decision) => decision.request_id === id)!;
+      const direct = req.actor!.role === "admin";
+      if (direct && proposed.status !== "approved") {
+        res.status(200).json({ id: null, status: proposed.status, booked: false, proposedDecision: proposed, appliedCategory: input.requestedCategory, clash: proposed.reason, deterministic: true });
+        return;
+      }
       const databaseId = uuidv7();
-      await query("INSERT INTO venue_request(id,schedule_version_id,title,requested_category,draft,proposed_decision,status,requested_by) VALUES($1,$2,$3,$4,$5,$6,'pending_review',$7)", [databaseId, input.scheduleVersionId, input.title, input.requestedCategory, input.draft, proposed, req.actor!.id]);
-      res.status(201).json({ id: databaseId, status: "pending_review", proposedDecision: proposed, appliedCategory: input.requestedCategory, deterministic: true });
+      const status = direct ? "approved" : "pending_review";
+      await query(
+        "INSERT INTO venue_request(id,schedule_version_id,title,requested_category,draft,proposed_decision,status,requested_by,reviewed_by,reviewed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,CASE WHEN $9::uuid IS NULL THEN NULL ELSE now() END)",
+        [databaseId, input.scheduleVersionId, input.title, input.requestedCategory, input.draft, proposed, status, req.actor!.id, direct ? req.actor!.id : null],
+      );
+      res.status(201).json({ id: databaseId, status, booked: direct, proposedDecision: proposed, appliedCategory: input.requestedCategory, deterministic: true });
     }),
   );
 
