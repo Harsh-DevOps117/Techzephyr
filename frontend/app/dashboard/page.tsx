@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/api";
 import type { BookingDraft } from "../../lib/types";
 import { roomCards, scheduleCards, useApiList, useCatalog, type ScheduleSummary } from "../../lib/catalog";
@@ -39,6 +39,11 @@ export default function Home() {
   const [bookingSchedule, setBookingSchedule] = useState("");
   const [bookingCategory, setBookingCategory] = useState("club_event");
   const [bookingOpen, setBookingOpen] = useState(false);
+  const [question, setQuestion] = useState("kya 3 Nov ko auditorium 6 baje khali hai?");
+  const [answer, setAnswer] = useState("");
+  const [offerRequest, setOfferRequest] = useState(false);
+  const [askBusy, setAskBusy] = useState(false);
+  const [prepared, setPrepared] = useState<{ draft: BookingDraft; date: string | null; scheduleVersionId: string; roomName: string } | null>(null);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [role, setRole] = useState("");
   const [overview, setOverview] = useState<{ counts: { sessions: number; bookingRequests: number }; roomUtilization: number; pendingApprovals: number; latestSchedule: { id: string; hardViolations: number; softPenalty: number } | null } | null>(null);
@@ -148,6 +153,40 @@ export default function Home() {
     setBookingOpen(true);
   }
 
+  async function askAvailability(event: FormEvent) {
+    event.preventDefault();
+    setAskBusy(true);
+    setOfferRequest(false);
+    setPrepared(null);
+    const response = await api<{ reply: string; offerRequest: boolean; draft: BookingDraft | null; date: string | null; scheduleVersionId: string | null; room: { name: string } | null }>("/api/v1/ai/availability", {
+      method: "POST",
+      body: JSON.stringify({ text: question }),
+    });
+    setAskBusy(false);
+    if (!response.data) {
+      setAnswer(response.error ?? "Could not check that slot");
+      return;
+    }
+    setAnswer(response.data.reply);
+    setOfferRequest(Boolean(response.data.offerRequest && response.data.draft && response.data.scheduleVersionId));
+    if (response.data.offerRequest && response.data.draft && response.data.scheduleVersionId) {
+      setPrepared({ draft: response.data.draft, date: response.data.date, scheduleVersionId: response.data.scheduleVersionId, roomName: response.data.room?.name ?? "Venue" });
+    }
+  }
+
+  function startRequestFromAnswer() {
+    if (!prepared) return;
+    setDraft(prepared.draft);
+    setWindowDates([prepared.date ?? ""]);
+    setNeedsText((prepared.draft.needs ?? []).join(", "));
+    setLimitNote("");
+    setBookingTitle(`${prepared.roomName} request`);
+    setBookingSchedule(prepared.scheduleVersionId);
+    setBookingCategory(role === "faculty" ? "guest_lecture" : role === "department_coordinator" ? "department_event" : "club_event");
+    setStatus("The slot is free. Check the fields, then submit the request.");
+    setBookingOpen(true);
+  }
+
   const roomChoices = [
     { id: "", title: "Any suitable room", description: "Let the rules pick a venue that fits", meta: "No preference" },
     ...roomCards(eventRooms),
@@ -188,10 +227,38 @@ export default function Home() {
           </li>
         ))}
       </ol>
-      <section className="attention-grid">
-        <article className="attention hero-card"><span className="card-icon coral"><CalendarIcon /></span><div><small>TIMETABLE</small><strong>{overview ? `${overview.counts.sessions} sessions` : "No dataset yet"}</strong><p>{overview?.latestSchedule ? `${overview.latestSchedule.hardViolations} hard conflicts · ${overview.roomUtilization}% room utilisation` : "Import a dataset, then generate the week."}</p></div><Link href="/schedule">Open scheduler <ArrowIcon /></Link></article>
-        {(!role || canOpen(role, "/repair")) && <article className="attention"><span className="card-icon violet"><WrenchIcon /></span><div><small>CHANGES</small><strong>Repair safely</strong><p>Upload disruptions and review every move.</p></div><Link href="/repair">Plan a repair <ArrowIcon /></Link></article>}
-        <article className="attention"><span className="card-icon mint"><VenueIcon /></span><div><small>SPECTRA WEEK</small><strong>{overview ? `${overview.counts.bookingRequests} requests` : "No requests yet"}</strong><p>{overview?.pendingApprovals ?? 0} validated proposals await approval.</p></div><Link href="/bookings">Review requests <ArrowIcon /></Link></article>
+      <section className="action-row">
+        <Link className="action-card" href="/schedule">
+          <CalendarIcon />
+          <strong>{overview ? overview.counts.sessions : "—"}</strong>
+          <span>Sessions</span>
+          <small>{overview?.latestSchedule ? `${overview.latestSchedule.hardViolations} hard conflicts` : "Open the timetable"}</small>
+        </Link>
+        {(!role || canOpen(role, "/repair")) && (
+          <Link className="action-card" href="/repair">
+            <WrenchIcon />
+            <strong className="action-title">Repair safely</strong>
+            <span>Changes</span>
+            <small>Review every move before it is published</small>
+          </Link>
+        )}
+        <Link className="action-card" href="/bookings">
+          <VenueIcon />
+          <strong>{overview ? overview.counts.bookingRequests : "—"}</strong>
+          <span>Requests</span>
+          <small>{overview ? `${overview.pendingApprovals} waiting for approval` : "Open venue requests"}</small>
+        </Link>
+      </section>
+      <section className="panel ask-panel">
+        <div className="panel-title"><div><p className="eyebrow">AVAILABILITY</p><h2>Is this room free?</h2></div></div>
+        <p className="lede">Ask in English or Hinglish. The timetable decides. The model only reads the question.</p>
+        <form onSubmit={askAvailability}>
+          <label className="sr-only" htmlFor="availability-question">Question</label>
+          <input id="availability-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="kya 3 Nov ko auditorium 6 baje khali hai?" />
+          <button className="primary" type="submit" disabled={askBusy || question.trim().length < 3}>{askBusy ? "Checking…" : "Ask"}</button>
+        </form>
+        {answer && <p className="ask-reply">{answer}</p>}
+        {offerRequest && <button type="button" className="secondary" onClick={startRequestFromAnswer}>Make this request</button>}
       </section>
       <section className="panel week-panel">
         <div className="panel-title"><div><p className="eyebrow">TIMETABLE PREVIEW</p><h2>{liveItems.length ? "Latest generated week" : "No live timetable yet"}</h2></div><Link href="/schedule">Full timetable <ArrowIcon /></Link></div>
