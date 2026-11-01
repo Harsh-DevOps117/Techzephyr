@@ -32,6 +32,7 @@ export default function Home() {
   const [status, setStatus] = useState("Describe a venue request in English or Hinglish.");
   const [draft, setDraft] = useState<BookingDraft | null>(null);
   const [windowDates, setWindowDates] = useState<string[]>([]);
+  const [needsText, setNeedsText] = useState("");
   const [limitNote, setLimitNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [bookingTitle, setBookingTitle] = useState("Campus venue request");
@@ -77,12 +78,13 @@ export default function Home() {
     setStatus("Reading your request…");
     const response = await api<{ draft: BookingDraft }>("/api/v1/ai/booking-drafts", { method: "POST", body: JSON.stringify({ text: request }) });
     setBusy(false);
-    if (!response.data) {
+    if (!response.data?.draft) {
       setStatus(response.error ?? "AI is unavailable. The manual venue form remains available.");
       return;
     }
     setDraft(response.data.draft);
     setWindowDates(response.data.draft.windows.map(() => ""));
+    setNeedsText(response.data.draft.needs.join(", "));
     setLimitNote("");
     setStatus("Draft created — set the date you want, then review every field before submission.");
   }
@@ -90,6 +92,7 @@ export default function Home() {
   function useManualForm() {
     setDraft({ attendance: null, duration_periods: null, windows: [{ day: "MON", from_period: 10, to_period: 11 }], room_types: ["seminar_hall"], needs: [], requested_room: null, mandatory_for_groups: [], assumptions: [], follow_up: null });
     setWindowDates([""]);
+    setNeedsText("");
     setLimitNote("");
     setStatus("Manual form opened. Choose your date, then fill every field before submitting.");
   }
@@ -102,28 +105,48 @@ export default function Home() {
       return;
     }
     setLimitNote("");
+    const cleared = { ...draft, follow_up: null };
     if (field === "duration_periods" && next !== null) {
       const duration = Math.min(13, next);
       const windows = draft.windows.map((window) => window.to_period - window.from_period + 1 >= duration ? window : { ...window, to_period: Math.min(13, window.from_period + duration - 1) });
-      setDraft({ ...draft, duration_periods: duration, windows });
+      setDraft({ ...cleared, duration_periods: duration, windows });
       return;
     }
-    setDraft({ ...draft, attendance: next });
+    setDraft({ ...cleared, attendance: next });
   }
 
   function updateWindow(index: number, patch: Partial<BookingDraft["windows"][number]>, date?: string) {
     if (!draft) return;
     const windows = draft.windows.map((window, item) => item === index ? { ...window, ...patch } : window);
-    setDraft({ ...draft, windows });
+    setDraft({ ...draft, windows, follow_up: null });
     if (date !== undefined) setWindowDates(windowDates.map((item, itemIndex) => itemIndex === index ? date : item));
+  }
+
+  function formProblem() {
+    if (!draft) return "Open the draft or the manual form first.";
+    if (!draft.attendance || draft.attendance < 1) return "Attendance must be 1 or more.";
+    if (!draft.duration_periods || draft.duration_periods < 1) return "Duration must be 1 or more periods.";
+    if (!bookingTitle.trim() || bookingTitle.trim().length < 3) return "Add a request title of at least 3 characters.";
+    if (!bookingSchedule) return "Choose the approved timetable card.";
+    if (draft.windows.length === 0) return "Add at least one Monday to Friday date.";
+    if (draft.windows.some((window) => window.from_period < 1 || window.to_period < window.from_period || window.to_period > 13)) return "Each date needs a from period and a to period between 1 and 13.";
+    if (draft.windows.some((window) => window.to_period - window.from_period + 1 < (draft.duration_periods ?? 1))) return "The date window must be long enough for the duration.";
+    return "";
   }
 
   async function submitDraft() {
     if (!draft) return;
+    const problem = formProblem();
+    if (problem) {
+      setLimitNote(problem);
+      setStatus(problem);
+      return;
+    }
+    const needs = needsText.split(",").map((item) => item.trim()).filter(Boolean);
     setBusy(true);
     const response = await api<{ status: string; proposedDecision: { status: string; reason: string } }>("/api/v1/booking-requests", {
       method: "POST",
-      body: JSON.stringify({ scheduleVersionId: bookingSchedule, title: bookingTitle, requestedCategory: bookingCategory, draft }),
+      body: JSON.stringify({ scheduleVersionId: bookingSchedule, title: bookingTitle.trim(), requestedCategory: bookingCategory, draft: { ...draft, needs, follow_up: null } }),
     });
     setBusy(false);
     if (!response.data) {
@@ -196,7 +219,7 @@ export default function Home() {
               <div className="draft-fields">
                 <label>Attendance<input type="number" min={1} step={1} value={draft.attendance ?? ""} onChange={(event) => setCount("attendance", event.target.value)} /></label>
                 <label>Duration in periods<input type="number" min={1} max={13} step={1} value={draft.duration_periods ?? ""} onChange={(event) => setCount("duration_periods", event.target.value)} /></label>
-                <label>Needs<input value={draft.needs.join(", ")} onChange={(event) => setDraft({ ...draft, needs: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} /></label>
+                <label>Requirements<input value={needsText} placeholder="mic, projector, stage" onChange={(event) => { setNeedsText(event.target.value); setDraft({ ...draft, follow_up: null }); setLimitNote(""); }} /></label>
                 <label>Request title<input value={bookingTitle} onChange={(event) => setBookingTitle(event.target.value)} /></label>
                 <label>Category
                   <select value={bookingCategory} onChange={(event) => setBookingCategory(event.target.value)}>
@@ -262,8 +285,7 @@ export default function Home() {
                   empty="This timetable has no event rooms."
                 />
               )}
-              {draft.follow_up && <p className="follow-up">Needs clarification: {draft.follow_up}</p>}
-              <button type="button" className="primary wide" disabled={busy || !bookingSchedule || !!draft.follow_up} onClick={submitDraft}>Submit for deterministic review <ArrowIcon /></button>
+              <button type="button" className="primary wide" disabled={busy} onClick={submitDraft}>{busy ? "Submitting…" : "Submit for deterministic review"}<ArrowIcon /></button>
             </div>
           )}
         </article>
