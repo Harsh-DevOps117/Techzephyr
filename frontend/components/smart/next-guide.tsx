@@ -93,7 +93,7 @@ function fromState(dash: Dash | null, role: string): Hint {
   if (role === "club") {
     return {
       title: "Ask for a room in plain language.",
-      copy: "Use Venues, or the assistant on this page. You do not approve the result.",
+      copy: "Submit a venue request from the workspace. You do not approve the result.",
       href: "/bookings",
       label: "Next: Venues",
     };

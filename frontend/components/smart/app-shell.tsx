@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { ApprovalIcon, BriefcaseIcon, CalendarIcon, DatabaseIcon, EventIcon, GridIcon, LogoutIcon, PanelIcon, VenueIcon, WrenchIcon } from "../ui/icons";
 import { NextGuide } from "./next-guide";
-import { VoiceAssistant } from "./voice-assistant";
 import { SmoothScroll } from "../motion/smooth-scroll";
 import { PageTransition } from "../motion/page-transition";
 import { canOpen, type Role } from "../../lib/access";
@@ -70,7 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className={`app-layout${navOpen === false ? " nav-closed" : ""}${navOpen === true ? " nav-open" : ""}`}>
       <aside className={`sidebar ${navOpen === true ? "open" : ""}`}>
         <div className="brand-row">
-          <Link className="brand" href="/dashboard" onClick={closeNavOnMobile}><span className="mark">C</span><span><b>TechZephyr</b><small>CIT scheduling</small></span></Link>
+          <Link className="brand" href="/dashboard" onClick={closeNavOnMobile}><span><b>TechZephyr</b><small>CIT scheduling</small></span></Link>
           <button type="button" className="nav-toggle" aria-expanded={navOpen !== false} aria-label="Hide navigation" onClick={toggleNav}><PanelIcon /></button>
         </div>
         <p className="side-kicker">Campus</p>
@@ -99,7 +98,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </main>
           )}
         </PageTransition>
-        <VoiceAssistant />
       </div>
     </div>
   );
