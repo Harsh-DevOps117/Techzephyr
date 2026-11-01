@@ -262,6 +262,31 @@ a.text-link, .panel-title a, .attention > a { color: var(--blue); font-weight: 5
 .pipeline li:not(:last-child):before { content: ""; position: absolute; left: 17px; top: 36px; bottom: 0; width: 1px; background: var(--line); }
 .pipeline strong { display: block; font-size: 15px; font-weight: 500; white-space: nowrap; }
 .pipeline small { color: var(--slate); font-size: 13px; }
+.action-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }
+.action-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 148px;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+.action-card svg { width: 18px; height: 18px; }
+.action-card strong { font-family: "Space Grotesk", Inter, sans-serif; font-size: 42px; font-weight: 400; letter-spacing: -0.04em; line-height: 1; }
+.action-card .action-title { font-size: 28px; white-space: nowrap; }
+.action-card span { font-size: 16px; }
+.action-card small { color: var(--slate); font-size: 13px; line-height: 1.4; }
+.action-card:hover { background: var(--near); color: #fff; border-color: var(--near); }
+.action-card:hover small { color: #d5d8e0; }
+.ask-panel { margin-bottom: 18px; }
+.ask-panel form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 12px; }
+.ask-panel input { width: 100%; min-height: 46px; padding: 10px 12px; background: #fff; }
+.ask-reply { margin: 14px 0 0; font-size: 16px; line-height: 1.45; }
+.ask-panel .secondary { margin-top: 12px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 .week-panel { margin-top: 8px; }
 .week-board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
 .week-board section { display: grid; align-content: start; gap: 8px; min-width: 0; }
@@ -308,7 +333,7 @@ a.text-link, .panel-title a, .attention > a { color: var(--blue); font-weight: 5
   .site-research-row { gap: 8px; }
 }
 @media (max-width: 900px) {
-  .week-board { grid-template-columns: 1fr; }
+  .week-board, .action-row, .ask-panel form { grid-template-columns: 1fr; }
   .topline, .topline-actions { display: grid; justify-items: start; }
 }
 @media (max-width: 640px) {

@@ -7,6 +7,7 @@ import express, {
 import { createHash } from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
+import { draftForFreeSlot, judgeAvailability, readAvailabilityQuestion, type Occupant } from "../../application/ai/availability.js";
 import {
   AiUnavailableError,
   parseBookingRequest,
@@ -527,6 +528,67 @@ export function createApp() {
         intent: "booking",
         draft,
         configured: true,
+      });
+    }),
+  );
+
+  app.post(
+    "/api/v1/ai/availability",
+    rateLimit("ai-availability", 20, 20 / 60),
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const input = aiBookingRequestSchema.parse(req.body);
+      assertAiInput(input.text);
+      let parsed = null;
+      try {
+        parsed = await parseBookingRequest(input.text);
+      } catch (error) {
+        if (error instanceof GuardrailBlockedError) throw error;
+      }
+      const ask = readAvailabilityQuestion(input.text, parsed);
+      const found = await query<{ id: string; payload: CitDataset; objective: { export?: { sessions?: Placement[] } } }>(
+        "SELECT s.id, d.payload, s.objective FROM schedule_version s JOIN dataset_version d ON d.id = s.dataset_version_id WHERE s.status = 'approved' ORDER BY s.approved_at DESC NULLS LAST, s.created_at DESC LIMIT 1",
+      );
+      if (!found.rowCount) {
+        res.json({ reply: "Pehle ek approved timetable chahiye. Uske bina main khali slot nahi bata sakta.", free: null, offerRequest: false, deterministic: true, draft: null, date: ask.date, scheduleVersionId: null });
+        return;
+      }
+      const schedule = found.rows[0];
+      const sessions = new Map(schedule.payload.sessions.map((session) => [session.id, session]));
+      const occupants: Occupant[] = [];
+      for (const placement of schedule.objective.export?.sessions ?? []) {
+        const session = sessions.get(placement.session_id);
+        if (!session) continue;
+        occupants.push({ room_id: placement.room_id, day: placement.day, start_period: placement.start_period, end_period: placement.start_period + session.duration - 1, label: session.course_id });
+      }
+      const held = await query<{ title: string; proposed_decision: { status?: string; room_id?: string; day?: string; start_period?: number; end_period?: number } }>(
+        "SELECT title, proposed_decision FROM venue_request WHERE schedule_version_id=$1 AND status IN ('pending_review','approved','alternative_offered')",
+        [schedule.id],
+      );
+      for (const item of held.rows) {
+        const decision = item.proposed_decision;
+        if (!decision?.room_id || !decision.day || !decision.start_period || !decision.end_period) continue;
+        if (decision.status !== "approved" && decision.status !== "alternative_offered") continue;
+        occupants.push({ room_id: decision.room_id, day: decision.day, start_period: decision.start_period, end_period: decision.end_period, label: item.title });
+      }
+      const manuals = await query<{ title: string; day: string; start_period: number; end_period: number; room_id: string }>(
+        "SELECT title, day, start_period, end_period, room_id FROM manual_event WHERE schedule_version_id=$1",
+        [schedule.id],
+      );
+      for (const item of manuals.rows) occupants.push({ room_id: item.room_id, day: item.day, start_period: item.start_period, end_period: item.end_period, label: item.title });
+      const judged = judgeAvailability({ ask, rooms: schedule.payload.rooms, occupants, canRequest: req.actor!.role !== "admin" });
+      const draft = judged.free && judged.room ? draftForFreeSlot(ask, judged.room) : null;
+      res.json({
+        reply: judged.reply,
+        free: judged.free,
+        offerRequest: Boolean(draft && req.actor!.role !== "admin"),
+        deterministic: true,
+        configured: Boolean(config.GROQ_API_KEY),
+        draft,
+        date: ask.date,
+        day: ask.day,
+        scheduleVersionId: schedule.id,
+        room: judged.room ? { id: judged.room.id, name: judged.room.name } : null,
       });
     }),
   );
