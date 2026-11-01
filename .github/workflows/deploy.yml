@@ -18,6 +18,7 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
           HOST_NAME: ${{ secrets.HOST_NAME }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
           set -euo pipefail
@@ -41,12 +42,13 @@ jobs:
           fi
           chmod 600 ~/.ssh/deploy.pem
           ssh-keygen -y -f ~/.ssh/deploy.pem >/dev/null
+          groq_q=$(python3 -c 'import os, shlex; print(shlex.quote(os.environ.get("GROQ_API_KEY", "")))')
           ssh -i ~/.ssh/deploy.pem \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=accept-new \
             -o ServerAliveInterval=30 \
             "${user}@${ip}" \
-            "PUBLIC_ORIGIN=http://${ip} bash -s" <<'REMOTE'
+            "PUBLIC_ORIGIN=http://${ip} GROQ_API_KEY=${groq_q} bash -s" <<'REMOTE'
           set -euo pipefail
           if ! command -v dnf >/dev/null 2>&1; then
             echo "This deploy expects Amazon Linux (dnf)."
@@ -97,6 +99,9 @@ jobs:
                   lines.append(line)
           path.write_text("\n".join(lines) + "\n")
           PY
+          fi
+          if [ -n "${GROQ_API_KEY:-}" ]; then
+            python3 -c 'import os,pathlib; p=pathlib.Path(".env"); k=os.environ["GROQ_API_KEY"]; ls=p.read_text().splitlines() if p.exists() else []; o=[("GROQ_API_KEY="+k if x.startswith("GROQ_API_KEY=") else x) for x in ls]; o=o if any(x.startswith("GROQ_API_KEY=") for x in ls) else o+["GROQ_API_KEY="+k]; p.write_text("\n".join(o)+"\n")'
           fi
           mem_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
           swap_kb="$(awk '/SwapTotal/ {print $2}' /proc/meminfo)"

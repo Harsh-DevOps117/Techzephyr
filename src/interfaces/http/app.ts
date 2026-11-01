@@ -531,6 +531,36 @@ export function createApp() {
   );
 
   app.post(
+    "/api/v1/ai/explain",
+    rateLimit("ai-explain", 10, 10 / 60),
+    requireRole("admin", "department_coordinator", "faculty", "club"),
+    asyncRoute(async (req, res) => {
+      const input = aiBookingRequestSchema.parse(req.body);
+      assertAiInput(input.text);
+      const found = await query<{ objective: { export?: { sessions?: Placement[]; fest_week?: { bookings?: Array<{ request_id: string; status: string; reason: string }> } } } }>(
+        "SELECT objective FROM schedule_version ORDER BY created_at DESC LIMIT 1",
+      );
+      const exported = found.rows[0]?.objective?.export;
+      const needle = input.text.toLowerCase();
+      const bookings = exported?.fest_week?.bookings ?? [];
+      const matched = bookings.filter((booking) =>
+        needle.includes(booking.request_id.toLowerCase())
+        || (needle.includes("reject") && booking.status === "rejected")
+        || (needle.includes("alternative") && booking.status === "alternative_offered"),
+      ).slice(0, 6);
+      const session = (exported?.sessions ?? []).find((item) => needle.includes(item.session_id.toLowerCase()));
+      const lines = [
+        ...matched.map((booking) => `${booking.request_id} is ${booking.status.replaceAll("_", " ")}: ${booking.reason}`),
+        session ? `${session.session_id} is placed on ${session.day} at period ${session.start_period} in ${session.room_id}. That placement was chosen by the deterministic scheduler, not by the model.` : "",
+      ].filter(Boolean);
+      const reply = lines.length
+        ? lines.join(" ")
+        : "Name a request such as BR-09, or ask which bookings were rejected. The reason is the one stored by the checker. Drafting can fail without blocking the manual form.";
+      res.json({ reply, deterministic: true, configured: Boolean(config.GROQ_API_KEY), manualForm: true, matches: matched });
+    }),
+  );
+
+  app.post(
     "/api/v1/booking-requests",
     requireRole("admin", "department_coordinator", "faculty", "club"),
     asyncRoute(async (req, res) => {
@@ -918,9 +948,16 @@ export function createApp() {
           requestId,
         });
       if (error instanceof AiUnavailableError)
-        return res
-          .status(503)
-          .json({ code: "ai_unavailable", message: error.message, requestId });
+        return res.status(200).json({
+          available: false,
+          configured: Boolean(config.GROQ_API_KEY),
+          manualForm: true,
+          code: "ai_unavailable",
+          message: error.message,
+          reply: error.message,
+          draft: null,
+          requestId,
+        });
       if (error instanceof GuardrailBlockedError)
         return res.status(400).json({ code: "guardrail_blocked", message: error.message, requestId });
       if (error instanceof ApiError)
