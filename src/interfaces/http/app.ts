@@ -14,7 +14,7 @@ import {
 } from "../../application/ai/booking-request-parser.js";
 import { bookingDraftSchema } from "../../domain/booking/booking-draft.js";
 import { parseScheduleChange } from "../../application/ai/schedule-change-parser.js";
-import { authenticate, login, logout, refresh } from "../../application/auth/auth-service.js";
+import { authenticate, confirmPasswordReset, login, logout, refresh, requestPasswordReset } from "../../application/auth/auth-service.js";
 import { assertAiInput, GuardrailBlockedError } from "../../application/ai/guardrails.js";
 import { logger } from "../../infrastructure/logging/logger.js";
 import {
@@ -249,6 +249,40 @@ export function createApp() {
           "Invalid email or password",
         );
       }
+    }),
+  );
+
+  app.post(
+    "/api/v1/auth/password-resets",
+    asyncRoute(async (req, res) => {
+      const input = z.object({
+        email: z.string().email(),
+        phone: z.string().regex(/^\+[1-9]\d{7,14}$/, "Use a phone number like +919876543210"),
+      }).parse(req.body);
+      try {
+        res.json(await requestPasswordReset(input.email, input.phone));
+      } catch (error) {
+        if (error instanceof Error && error.message === "unknown_account") throw new ApiError(404, "unknown_account", "No campus account uses that email");
+        if (error instanceof Error && error.message === "sms_failed") throw new ApiError(502, "sms_failed", "Twilio could not send the code. Check the demo number and try again.");
+        throw error;
+      }
+    }),
+  );
+
+  app.post(
+    "/api/v1/auth/password-resets/confirm",
+    asyncRoute(async (req, res) => {
+      const input = z.object({
+        email: z.string().email(),
+        code: z.string().regex(/^\d{6}$/, "Enter the 6 digit code"),
+        password: z.string().min(8, "Use at least 8 characters"),
+      }).parse(req.body);
+      try {
+        await confirmPasswordReset(input.email, input.code, input.password);
+      } catch {
+        throw new ApiError(400, "invalid_code", "That code is wrong or expired");
+      }
+      res.json({ reset: true });
     }),
   );
 
@@ -649,8 +683,17 @@ export function createApp() {
       });
       const proposed = decideBookings(data, found.rows[0].objective.export?.sessions ?? [], held).find((decision) => decision.request_id === id)!;
       const direct = req.actor!.role === "admin";
+      const recordJob = async (outcome: Record<string, unknown>) => {
+        const jobId = uuidv7();
+        await query(
+          "INSERT INTO job (id, type, priority, status, payload, result, attempt_count, correlation_id, started_at, completed_at) VALUES ($1, 'DECIDE_BOOKINGS', 1, 'succeeded', $2, $3, 1, $4, now(), now())",
+          [jobId, { scheduleVersionId: input.scheduleVersionId, title: input.title, requestId: id }, outcome, uuidv7()],
+        );
+        return jobId;
+      };
       if (direct && proposed.status !== "approved") {
-        res.status(200).json({ id: null, status: proposed.status, booked: false, proposedDecision: proposed, appliedCategory: input.requestedCategory, clash: proposed.reason, deterministic: true });
+        const jobId = await recordJob({ title: input.title, status: proposed.status, reason: proposed.reason, requestId: id });
+        res.status(200).json({ id: null, jobId, status: proposed.status, booked: false, proposedDecision: proposed, appliedCategory: input.requestedCategory, clash: proposed.reason, deterministic: true });
         return;
       }
       const databaseId = uuidv7();
@@ -659,7 +702,8 @@ export function createApp() {
         "INSERT INTO venue_request(id,schedule_version_id,title,requested_category,draft,proposed_decision,status,requested_by,reviewed_by,reviewed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,CASE WHEN $9::uuid IS NULL THEN NULL ELSE now() END)",
         [databaseId, input.scheduleVersionId, input.title, input.requestedCategory, input.draft, proposed, status, req.actor!.id, direct ? req.actor!.id : null],
       );
-      res.status(201).json({ id: databaseId, status, booked: direct, proposedDecision: proposed, appliedCategory: input.requestedCategory, deterministic: true });
+      const jobId = await recordJob({ title: input.title, status, reason: proposed.reason, requestId: id, room: proposed.room_id ?? null, day: proposed.day ?? null });
+      res.status(201).json({ id: databaseId, jobId, status, booked: direct, proposedDecision: proposed, appliedCategory: input.requestedCategory, deterministic: true });
     }),
   );
 

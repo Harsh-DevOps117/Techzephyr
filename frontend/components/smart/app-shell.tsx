@@ -70,7 +70,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className={`sidebar ${navOpen === true ? "open" : ""}`}>
         <div className="brand-row">
           <Link className="brand" href="/dashboard" onClick={closeNavOnMobile}><span><b>TechZephyr</b><small>CIT scheduling</small></span></Link>
-          <button type="button" className="nav-toggle" aria-expanded={navOpen !== false} aria-label="Hide navigation" onClick={toggleNav}><PanelIcon /></button>
         </div>
         <p className="side-kicker">Campus</p>
         <nav aria-label="Primary navigation">{visible.map(({ href, label, icon: NavIcon }) => <Link className={path === href ? "active" : ""} href={href} key={href} onClick={closeNavOnMobile}><NavIcon /><span>{label}</span></Link>)}</nav>

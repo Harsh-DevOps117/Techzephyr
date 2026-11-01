@@ -27,6 +27,9 @@ const configSchema = z.object({
   REFRESH_TOKEN_DAYS: z.coerce.number().int().positive().max(30).default(7),
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
   TEAM_NAME: z.string().min(1).max(80).default("TechZephyr"),
+  TWILIO_ACCOUNT_SID: z.string().optional().transform((value) => value?.trim() || undefined),
+  TWILIO_AUTH_TOKEN: z.string().optional().transform((value) => value?.trim() || undefined),
+  TWILIO_FROM_NUMBER: z.string().optional().transform((value) => value?.trim() || undefined),
   ALLOW_HEADER_AUTH: z
     .enum(["true", "false"])
     .optional()

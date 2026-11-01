@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
 import { config } from "../../infrastructure/config/env.js";
 import { query } from "../../infrastructure/database/postgres.js";
@@ -53,6 +53,64 @@ export async function refresh(refreshToken: string) {
   await query("UPDATE auth_session SET revoked_at = now() WHERE id = $1", [session.id]);
   logger.info("auth.refresh", { userId: session.user_id });
   return issue({ id: session.user_id, role: session.role });
+}
+
+function codeHash(code: string) {
+  return createHash("sha256").update(code).digest("hex");
+}
+
+export async function requestPasswordReset(email: string, phone: string) {
+  const found = await query<{ id: string }>("SELECT id FROM app_user WHERE email = $1", [email.toLowerCase()]);
+  const user = found.rows[0];
+  if (!user) throw new Error("unknown_account");
+  const code = String(randomInt(100000, 1000000));
+  await query("DELETE FROM password_reset WHERE user_id = $1", [user.id]);
+  await query(
+    "INSERT INTO password_reset (id, user_id, code_hash, phone, expires_at) VALUES ($1, $2, $3, $4, now() + interval '10 minutes')",
+    [uuidv7(), user.id, codeHash(code), phone],
+  );
+  const sid = config.TWILIO_ACCOUNT_SID;
+  const token = config.TWILIO_AUTH_TOKEN;
+  const from = config.TWILIO_FROM_NUMBER;
+  if (!sid || !token || !from) {
+    logger.info("auth.password_reset_demo", { userId: user.id });
+    return { sent: true, demo: true, demoCode: code };
+  }
+  const body = new URLSearchParams({ To: phone, From: from, Body: `TechZephyr password code: ${code}. It expires in 10 minutes.` });
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: "POST",
+    headers: {
+      authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  if (!response.ok) {
+    await query("DELETE FROM password_reset WHERE user_id = $1", [user.id]);
+    logger.warn("auth.password_reset_sms_failed", { userId: user.id, status: response.status });
+    throw new Error("sms_failed");
+  }
+  logger.info("auth.password_reset_sent", { userId: user.id });
+  return { sent: true, demo: false };
+}
+
+export async function confirmPasswordReset(email: string, code: string, password: string) {
+  const found = await query<{ id: string; code_hash: string }>(
+    `SELECT u.id, r.code_hash
+     FROM password_reset r JOIN app_user u ON u.id = r.user_id
+     WHERE u.email = $1 AND r.expires_at > now()
+     ORDER BY r.created_at DESC LIMIT 1`,
+    [email.toLowerCase()],
+  );
+  const row = found.rows[0];
+  const expected = Buffer.from(row?.code_hash ?? codeHash("000000"));
+  const actual = Buffer.from(codeHash(code));
+  if (!row || expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw new Error("invalid_code");
+  const passwordHash = await bcrypt.hash(password, 12);
+  await query("UPDATE app_user SET password_hash = $2 WHERE id = $1", [row.id, passwordHash]);
+  await query("DELETE FROM password_reset WHERE user_id = $1", [row.id]);
+  await query("UPDATE auth_session SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [row.id]);
+  logger.info("auth.password_reset_confirmed", { userId: row.id });
 }
 
 export async function logout(refreshToken: string) {

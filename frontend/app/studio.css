@@ -112,10 +112,11 @@ h3, .panel-title h2, .assistant-title h2, .section-title h2, .auth h2, .picker-c
 .picker-card:hover { border-color: var(--near); transform: none; }
 .picker-card strong { font-size: 18px; }
 .picker-card.selected { background: var(--wash); border-color: var(--green); box-shadow: none; }
+.sidebar { top: 64px; }
 .sticky-nav {
   position: sticky;
   top: 0;
-  z-index: 28;
+  z-index: 50;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -231,6 +232,9 @@ a.text-link, .panel-title a, .attention > a { color: var(--blue); font-weight: 5
 .auth { background: #fff; border-radius: 16px; padding: 36px 32px; }
 .auth h2 { font-size: 48px; }
 .account-pills { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.demo-code { margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--stone); font-size: 14px; }
+.demo-code b { font-family: "IBM Plex Mono", ui-monospace, monospace; letter-spacing: 0.12em; }
+.reset-link { margin-top: 12px; background: none; border: 0; padding: 0; color: var(--blue); font-size: 14px; }
 .account-pills button { font-size: 13px; padding: 8px 6px; border-radius: 30px; background: transparent; color: var(--ink); border: 1px solid var(--line); }
 .account-pills button.active { background: var(--near); color: #fff; border-color: var(--near); }
 .schedule-table > div { font-size: 14px; padding: 14px 16px; border-top: 1px solid var(--line); }
@@ -275,9 +279,9 @@ a.text-link, .panel-title a, .attention > a { color: var(--blue); font-weight: 5
   color: var(--ink);
 }
 .action-card svg { width: 18px; height: 18px; }
-.action-card strong { font-family: "Space Grotesk", Inter, sans-serif; font-size: 42px; font-weight: 400; letter-spacing: -0.04em; line-height: 1; }
-.action-card .action-title { font-size: 28px; white-space: nowrap; }
-.action-card span { font-size: 16px; }
+.action-card strong { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 34px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; }
+.action-card .action-title { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 22px; font-weight: 500; white-space: nowrap; }
+.action-card span { font-family: Inter, Arial, sans-serif; font-size: 15px; font-weight: 500; }
 .action-card small { color: var(--slate); font-size: 13px; line-height: 1.4; }
 .action-card:hover { background: var(--near); color: #fff; border-color: var(--near); }
 .action-card:hover small { color: #d5d8e0; }
@@ -286,6 +290,7 @@ a.text-link, .panel-title a, .attention > a { color: var(--blue); font-weight: 5
 .ask-panel input { width: 100%; min-height: 46px; padding: 10px 12px; background: #fff; }
 .ask-reply { margin: 14px 0 0; font-size: 16px; line-height: 1.45; }
 .ask-panel .secondary { margin-top: 12px; }
+.job-result { margin: 6px 0 0; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; text-transform: capitalize; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 .week-panel { margin-top: 8px; }
 .week-board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
@@ -304,6 +309,16 @@ a.text-link, .panel-title a, .attention > a { color: var(--blue); font-weight: 5
 .fog-head, .fog-head > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .fog-head h2 { margin: 0; font-family: "Space Grotesk", Inter, sans-serif; font-size: 32px; font-weight: 400; }
 .fog-card .lede { margin: 8px 0 16px; }
+.fog-card .draft-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+.fog-card .draft-fields > label { display: grid; gap: 6px; font-size: 13px; font-weight: 500; }
+.fog-card .draft-fields > label:nth-child(1),
+.fog-card .draft-fields > label:nth-child(2),
+.fog-card .draft-fields > label:nth-child(5) { grid-column: 1 / -1; }
+.fog-card input, .fog-card select { width: 100%; min-height: 42px; background: #fff; }
+.fog-card .window-row { grid-template-columns: 1fr 1fr; }
+.fog-steps { display: flex; gap: 8px; margin: 0 0 14px; }
+.fog-steps span { border-radius: 999px; padding: 4px 10px; font-size: 12px; color: var(--slate); border: 1px solid var(--line); }
+.fog-steps span.on { color: var(--ink); border-color: var(--near); background: var(--stone); }
 .fog-card form { display: grid; gap: 10px; margin-bottom: 16px; }
 .fog-card textarea { min-height: 72px; width: 100%; }
 .fog-next { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 10px; }
