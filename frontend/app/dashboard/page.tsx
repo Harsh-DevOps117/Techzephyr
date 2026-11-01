@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/api";
 import type { BookingDraft } from "../../lib/types";
 import { roomCards, scheduleCards, useApiList, useCatalog, type ScheduleSummary } from "../../lib/catalog";
@@ -29,8 +29,7 @@ function atLeastOne(value: string) {
 export default function Home() {
   const schedules = useApiList<ScheduleSummary>("/api/v1/schedules");
   const approved = schedules.items.filter((item) => item.status === "approved");
-  const [request, setRequest] = useState("seminar hall kal shaam 6 baje, 2 ghante, 100 log, mic chahiye");
-  const [status, setStatus] = useState("Describe a venue request in English or Hinglish.");
+  const [status, setStatus] = useState("Fill the fields. The next step appears when they are complete.");
   const [draft, setDraft] = useState<BookingDraft | null>(null);
   const [windowDates, setWindowDates] = useState<string[]>([]);
   const [needsText, setNeedsText] = useState("");
@@ -73,23 +72,6 @@ export default function Home() {
     const match = eventRooms.find((room) => room.id.toLowerCase() === needle || room.name.toLowerCase() === needle);
     if (match && draft.requested_room !== match.id) setDraft({ ...draft, requested_room: match.id });
   }, [draft, eventRooms]);
-
-  async function parse(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setStatus("Reading your request…");
-    const response = await api<{ draft: BookingDraft | null; message?: string }>("/api/v1/ai/booking-drafts", { method: "POST", body: JSON.stringify({ text: request }) });
-    setBusy(false);
-    if (!response.data?.draft) {
-      setStatus(response.data?.message ?? response.error ?? "AI is unavailable. The manual venue form remains available.");
-      return;
-    }
-    setDraft(response.data.draft);
-    setWindowDates(response.data.draft.windows.map(() => ""));
-    setNeedsText(response.data.draft.needs.join(", "));
-    setLimitNote("");
-    setStatus("Draft created — set the date you want, then review every field before submission.");
-  }
 
   function useManualForm() {
     setDraft({ attendance: null, duration_periods: null, windows: [{ day: "MON", from_period: 10, to_period: 11 }], room_types: ["seminar_hall"], needs: [], requested_room: null, mandatory_for_groups: [], assumptions: [], follow_up: null });
@@ -240,10 +222,6 @@ export default function Home() {
               <button type="button" className="ghost" onClick={() => setBookingOpen(false)}>Close</button>
             </div>
             <p className="lede">{role === "admin" ? "An admin booking is applied immediately. A clash is reported here and is not sent for review." : "Fill the first fields. The next section appears when they are complete."}</p>
-            <form onSubmit={parse}>
-              <label>Describe it<textarea value={request} onChange={(event) => setRequest(event.target.value)} /></label>
-              <button className="secondary" disabled={busy}>{busy ? "Reading…" : "Fill from this sentence"}</button>
-            </form>
             <div className="draft-fields">
               <label>Request title<input value={bookingTitle} onChange={(event) => setBookingTitle(event.target.value)} /></label>
               <label>Category
@@ -332,7 +310,7 @@ export default function Home() {
         </div>
       )}
       <section className="trust-strip">
-        <span><CheckIcon /> AI never approves a booking</span>
+        <span><CheckIcon /> Every booking is checked by rules</span>
         <span><CheckIcon /> Every proposal is code-validated</span>
         <span><CheckIcon /> Admin approval required for changes</span>
       </section>

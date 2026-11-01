@@ -13,7 +13,7 @@ const rows: { text: string; kind?: "lab" | "exam" }[][] = [
   [{ text: "" }, { text: "" }, { text: "HS101" }, { text: "CS201", kind: "lab" }, { text: "" }],
 ];
 
-const marks = ["Validator", "Two admins", "Card pickers", "Hinglish drafts", "Zero hard conflicts"];
+const marks = ["Validator", "Two admins", "Card pickers", "Venue requests", "Zero hard conflicts"];
 
 export default function Landing() {
   const [signedIn, setSignedIn] = useState(false);
@@ -110,7 +110,7 @@ export default function Landing() {
             <div className="site-cap-grid">
               <article><span>01</span><h3>Timetable</h3><p>Every lecture, tutorial and lab is placed once.</p></article>
               <article><span>02</span><h3>Exams</h3><p>Midsems use the following week. Room capacity is halved.</p></article>
-              <article><span>03</span><h3>Spectra</h3><p>English or Hinglish becomes an editable draft.</p></article>
+              <article><span>03</span><h3>Spectra</h3><p>Venue requests keep the category you choose.</p></article>
               <article><span>04</span><h3>Repair</h3><p>A leave or a closed room moves as few sessions as possible.</p></article>
             </div>
           </div>
@@ -135,7 +135,7 @@ export default function Landing() {
             <article>
               <span className="site-chip coral">03 Venues</span>
               <h3>Plain language in. A reason out.</h3>
-              <p>The assistant drafts the request. It cannot approve it.</p>
+              <p>Fill the venue form. The checker reports a clash or a valid slot.</p>
             </article>
           </div>
         </section>

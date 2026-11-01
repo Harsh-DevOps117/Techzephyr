@@ -20,7 +20,6 @@ export default function Repair() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState("");
-  const [changePrompt, setChangePrompt] = useState("F07 will be unavailable on Monday for the whole teaching day due to conference travel.");
 
   function chooseBaseline(id: string) {
     setBaseline(id);
@@ -42,26 +41,6 @@ export default function Repair() {
     }
   }
 
-  async function parseChange() {
-    setBusy(true);
-    setError("");
-    const response = await api<{ draft: { changes: NonNullable<DisruptionFile["changes"]>; follow_up: string | null } }>("/api/v1/ai/schedule-change-drafts", {
-      method: "POST",
-      body: JSON.stringify({ text: changePrompt }),
-    });
-    setBusy(false);
-    if (!response.data) {
-      setError(`${response.error ?? "AI parsing unavailable"} Upload a change file instead.`);
-      return;
-    }
-    if (response.data.draft.follow_up) {
-      setError(response.data.draft.follow_up);
-      return;
-    }
-    setDisruption({ changes: response.data.draft.changes });
-    setFileName("AI-created editable draft");
-  }
-
   async function submit() {
     if (!disruption) return;
     setBusy(true);
@@ -80,7 +59,7 @@ export default function Repair() {
 
   return (
     <main className="route">
-      <StepHeader eyebrow="ADMIN · SCHEDULE CHANGES" title="Repair the timetable" copy="Pick the approved timetable, describe a change or upload the official format. The engine moves as few sessions as possible." />
+      <StepHeader eyebrow="ADMIN · SCHEDULE CHANGES" title="Repair the timetable" copy="Pick the approved timetable and upload the change file. The engine moves as few sessions as possible." />
       <section className="form-layout">
         <div className="form-card">
           <div className="section-title"><span className="card-icon violet"><WrenchIcon /></span><div><h2>Repair inputs</h2><p>Changes are proposed first and never applied automatically.</p></div></div>
@@ -104,9 +83,6 @@ export default function Repair() {
             error={datasets.error}
             empty="Import a dataset before repairing a timetable."
           />
-          <label>Describe a faculty or room change<textarea value={changePrompt} onChange={(event) => setChangePrompt(event.target.value)} /></label>
-          <button className="secondary" onClick={parseChange} disabled={busy}>Create editable change draft</button>
-          <p className="or-divider">or upload the official change format</p>
           <label className={`dropzone compact ${disruption ? "selected" : ""}`}>
             <UploadIcon />
             <strong>{disruption ? fileName : "Choose disruption JSON"}</strong>
