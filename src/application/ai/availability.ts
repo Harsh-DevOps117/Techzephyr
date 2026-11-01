@@ -8,6 +8,7 @@ const roomTypes = ["classroom", "lecture_hall", "auditorium", "seminar_hall", "o
 
 export type AvailabilityRoom = { id: string; name: string; type: string; allowed_uses: string[] };
 export type Occupant = { room_id: string; day: string; start_period: number; end_period: number; label: string };
+export type AvailabilityOption = { room: AvailabilityRoom; day: Day; fromPeriod: number; toPeriod: number };
 
 export type AvailabilityAsk = {
   date: string | null;
@@ -108,6 +109,10 @@ function overlaps(start: number, end: number, from: number, to: number) {
   return start <= to && end >= from;
 }
 
+function isFree(option: AvailabilityOption, occupants: Occupant[]) {
+  return !occupants.some((item) => item.room_id === option.room.id && item.day === option.day && overlaps(item.start_period, item.end_period, option.fromPeriod, option.toPeriod));
+}
+
 export function judgeAvailability(input: {
   ask: AvailabilityAsk;
   rooms: AvailabilityRoom[];
@@ -127,19 +132,38 @@ export function judgeAvailability(input: {
     : [];
   const typed = rooms.filter((room) => ask.roomTypes.includes(room.type) && room.allowed_uses.includes("event"));
   const candidates = (named.length ? named : typed).filter((room) => room.allowed_uses.includes("event") || named.includes(room));
-  const pool = candidates.length ? candidates : named;
+  // A question such as "what is free on Monday at 6?" intentionally has no room name.
+  // In that case, search every event-capable room and return the first valid option.
+  const pool = candidates.length ? candidates : named.length ? named : rooms.filter((room) => room.allowed_uses.includes("event"));
   if (!pool.length) {
-    return { free: null, reply: "Kaunsa room? Auditorium, seminar hall, ya lecture hall ka naam likho.", room: null, clash: null };
+    return { free: null, reply: "No event-capable venue is configured in this timetable.", room: null, clash: null };
   }
   const when = `${formatDate(ask.date)} ${clock[ask.fromPeriod]}${ask.toPeriod !== ask.fromPeriod ? `–${clock[ask.toPeriod]}` : ""}`;
-  const freeRoom = pool.find((room) => !occupants.some((item) => item.room_id === room.id && item.day === ask.day && overlaps(item.start_period, item.end_period, ask.fromPeriod, ask.toPeriod)));
+  const freeRoom = pool.find((room) => isFree({ room, day: ask.day!, fromPeriod: ask.fromPeriod, toPeriod: ask.toPeriod }, occupants));
   if (freeRoom) {
     const help = canRequest ? " Main iske liye request bana sakta hoon." : " Book a venue se admin ise seedha book kar sakta hai. Request ki zaroorat nahi.";
     return { free: true, reply: `Haan, ${when} ko ${freeRoom.name} khali hai.${help}`, room: freeRoom, clash: null };
   }
   const taken = pool[0];
   const block = occupants.find((item) => item.room_id === taken.id && item.day === ask.day && overlaps(item.start_period, item.end_period, ask.fromPeriod, ask.toPeriod));
-  return { free: false, reply: `Nahi, ${when} ko ${taken.name} khali nahi hai.${block ? ` ${block.label} wahan hai.` : ""}`, room: taken, clash: block?.label ?? "Another session" };
+  const duration = ask.toPeriod - ask.fromPeriod + 1;
+  const eventRooms = rooms.filter((room) => room.allowed_uses.includes("event"));
+  const alternativeRooms = eventRooms
+    .filter((room) => room.id !== taken.id)
+    .filter((room) => ask.roomTypes.length === 0 || ask.roomTypes.includes(room.type));
+  const sameTime = alternativeRooms
+    .map((room) => ({ room, day: ask.day!, fromPeriod: ask.fromPeriod, toPeriod: ask.toPeriod }))
+    .find((option) => isFree(option, occupants));
+  const otherTime = Array.from({ length: Math.max(0, 14 - 10 - duration + 1) }, (_, index) => 10 + index)
+    .filter((start) => start !== ask.fromPeriod)
+    .map((start) => ({ room: taken, day: ask.day!, fromPeriod: start, toPeriod: start + duration - 1 }))
+    .find((option) => isFree(option, occupants));
+  const alternatives = [sameTime, otherTime].filter((option): option is AvailabilityOption => Boolean(option));
+  const suggestion = alternatives[0];
+  const suggestionText = suggestion
+    ? ` Alternative available: ${suggestion.room.name}, ${formatDate(ask.date)} ${clock[suggestion.fromPeriod]}${suggestion.toPeriod !== suggestion.fromPeriod ? `–${clock[suggestion.toPeriod]}` : ""}. I can prepare it for review.`
+    : " No valid alternative is currently available for this request.";
+  return { free: false, reply: `Nahi, ${when} ko ${taken.name} khali nahi hai.${block ? ` ${block.label} wahan hai.` : ""}${suggestionText}`, room: taken, clash: block?.label ?? "Another session", alternatives };
 }
 
 function formatDate(iso: string) {
@@ -147,14 +171,18 @@ function formatDate(iso: string) {
 }
 
 export function draftForFreeSlot(ask: AvailabilityAsk, room: AvailabilityRoom): BookingDraft {
-  const type = roomTypes.includes(room.type as typeof roomTypes[number]) ? room.type as typeof roomTypes[number] : "seminar_hall";
+  return draftForAvailabilityOption({ room, day: ask.day ?? "MON", fromPeriod: ask.fromPeriod, toPeriod: ask.toPeriod });
+}
+
+export function draftForAvailabilityOption(option: AvailabilityOption): BookingDraft {
+  const type = roomTypes.includes(option.room.type as typeof roomTypes[number]) ? option.room.type as typeof roomTypes[number] : "seminar_hall";
   return {
     attendance: 40,
-    duration_periods: ask.toPeriod - ask.fromPeriod + 1,
-    windows: [{ day: ask.day ?? "MON", from_period: ask.fromPeriod, to_period: ask.toPeriod }],
+    duration_periods: option.toPeriod - option.fromPeriod + 1,
+    windows: [{ day: option.day, from_period: option.fromPeriod, to_period: option.toPeriod }],
     room_types: [type],
     needs: [],
-    requested_room: room.id,
+    requested_room: option.room.id,
     mandatory_for_groups: [],
     assumptions: [],
     follow_up: null,

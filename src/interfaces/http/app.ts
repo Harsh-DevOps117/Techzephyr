@@ -7,7 +7,7 @@ import express, {
 import { createHash } from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
-import { draftForFreeSlot, judgeAvailability, readAvailabilityQuestion, type Occupant } from "../../application/ai/availability.js";
+import { draftForAvailabilityOption, draftForFreeSlot, judgeAvailability, readAvailabilityQuestion, type Occupant } from "../../application/ai/availability.js";
 import {
   AiUnavailableError,
   parseBookingRequest,
@@ -48,6 +48,45 @@ const roleSchema = z.enum([
 ]);
 const actorIdSchema = z.string().uuid();
 const idempotencyKeySchema = z.string().uuid();
+const accessCookieName = "tz_access";
+const refreshCookieName = "tz_refresh";
+
+function readCookie(req: Request, name: string): string | undefined {
+  const encoded = req.header("cookie")
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+  if (!encoded) return undefined;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
+  }
+}
+
+function sessionCookieOptions(maxAge: number, path = "/") {
+  return {
+    httpOnly: true,
+    secure: config.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path,
+    maxAge,
+  };
+}
+
+function setSessionCookies(
+  res: Response,
+  tokens: { accessToken: string; refreshToken: string; expiresIn: number },
+) {
+  res.cookie(accessCookieName, tokens.accessToken, sessionCookieOptions(tokens.expiresIn * 1000));
+  res.cookie(refreshCookieName, tokens.refreshToken, sessionCookieOptions(config.REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000));
+}
+
+function clearSessionCookies(res: Response) {
+  res.clearCookie(accessCookieName, { httpOnly: true, secure: config.NODE_ENV === "production", sameSite: "lax", path: "/" });
+  res.clearCookie(refreshCookieName, { httpOnly: true, secure: config.NODE_ENV === "production", sameSite: "lax", path: "/" });
+}
 
 function asyncRoute(
   fn: (req: AuthedRequest, res: Response, next: NextFunction) => Promise<void>,
@@ -58,7 +97,7 @@ function asyncRoute(
 
 function requireRole(...allowed: Role[]) {
   return asyncRoute(async (req, _res, next) => {
-    const bearer = req.header("authorization")?.match(/^Bearer (.+)$/i)?.[1];
+    const bearer = req.header("authorization")?.match(/^Bearer (.+)$/i)?.[1] ?? readCookie(req, accessCookieName);
     let claims: { id: string; role: string } | null = null;
     if (bearer) {
       try {
@@ -189,6 +228,7 @@ const bookingSubmissionSchema = z.object({
   title: z.string().trim().min(3).max(160),
   requestedCategory: z.enum(["institute_event", "guest_lecture", "department_event", "club_event"]),
   draft: bookingDraftSchema,
+  aiAssisted: z.boolean().optional().default(false),
 });
 
 export function createApp() {
@@ -241,7 +281,9 @@ export function createApp() {
     asyncRoute(async (req, res) => {
       try {
         const input = loginSchema.parse(req.body);
-        res.json(await login(input.email, input.password));
+        const tokens = await login(input.email, input.password);
+        setSessionCookies(res, tokens);
+        res.json({ expiresIn: tokens.expiresIn, role: tokens.role });
       } catch {
         throw new ApiError(
           401,
@@ -307,9 +349,13 @@ export function createApp() {
   app.post(
     "/api/v1/auth/refresh",
     asyncRoute(async (req, res) => {
-      const refreshToken = z.object({ refreshToken: z.string().min(20) }).parse(req.body).refreshToken;
+      const refreshToken = readCookie(req, refreshCookieName);
+      if (!refreshToken || refreshToken.length < 20)
+        throw new ApiError(401, "invalid_refresh", "Sign in again");
       try {
-        res.json(await refresh(refreshToken));
+        const tokens = await refresh(refreshToken);
+        setSessionCookies(res, tokens);
+        res.json({ expiresIn: tokens.expiresIn, role: tokens.role });
       } catch {
         throw new ApiError(401, "invalid_refresh", "Sign in again");
       }
@@ -319,8 +365,9 @@ export function createApp() {
   app.post(
     "/api/v1/auth/logout",
     asyncRoute(async (req, res) => {
-      const refreshToken = z.object({ refreshToken: z.string().min(20) }).parse(req.body).refreshToken;
-      await logout(refreshToken);
+      const refreshToken = readCookie(req, refreshCookieName);
+      if (refreshToken) await logout(refreshToken);
+      clearSessionCookies(res);
       res.json({ status: "signed_out" });
     }),
   );
@@ -611,11 +658,16 @@ export function createApp() {
       );
       for (const item of manuals.rows) occupants.push({ room_id: item.room_id, day: item.day, start_period: item.start_period, end_period: item.end_period, label: item.title });
       const judged = judgeAvailability({ ask, rooms: schedule.payload.rooms, occupants, canRequest: req.actor!.role !== "admin" });
-      const draft = judged.free && judged.room ? draftForFreeSlot(ask, judged.room) : null;
+      const alternative = !judged.free && "alternatives" in judged ? judged.alternatives?.[0] ?? null : null;
+      const draft = judged.free && judged.room ? draftForFreeSlot(ask, judged.room) : alternative ? draftForAvailabilityOption(alternative) : null;
+      const exchangeRequested = /\b(exchange|swap|replace|badal|change booking)\b/i.test(input.text);
       res.json({
-        reply: judged.reply,
+        reply: exchangeRequested && alternative
+          ? `${judged.reply} This is a replacement request, not an automatic exchange; it must be reviewed by the authorized approver.`
+          : judged.reply,
         free: judged.free,
         offerRequest: Boolean(draft && req.actor!.role !== "admin"),
+        exchangeRequiresApproval: exchangeRequested,
         deterministic: true,
         configured: Boolean(config.GROQ_API_KEY),
         draft,
@@ -623,6 +675,7 @@ export function createApp() {
         day: ask.day,
         scheduleVersionId: schedule.id,
         room: judged.room ? { id: judged.room.id, name: judged.room.name } : null,
+        alternative: alternative ? { room: { id: alternative.room.id, name: alternative.room.name }, day: alternative.day, fromPeriod: alternative.fromPeriod, toPeriod: alternative.toPeriod } : null,
       });
     }),
   );
@@ -682,7 +735,8 @@ export function createApp() {
         return [{ room_id: decision.room_id, day: decision.day as Day, start_period: decision.start_period, end_period: decision.end_period }];
       });
       const proposed = decideBookings(data, found.rows[0].objective.export?.sessions ?? [], held).find((decision) => decision.request_id === id)!;
-      const direct = req.actor!.role === "admin";
+      // Assistant-generated drafts always require an independent human review.
+      const direct = req.actor!.role === "admin" && !input.aiAssisted;
       const recordJob = async (outcome: Record<string, unknown>) => {
         const jobId = uuidv7();
         await query(

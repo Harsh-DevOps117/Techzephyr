@@ -32,14 +32,12 @@ paths:
                 password: { type: string, format: password, example: TechZephyr!2026 }
       responses:
         '200':
-          description: Access and refresh tokens
+          description: Session established with HttpOnly access and refresh cookies
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  accessToken: { type: string }
-                  refreshToken: { type: string }
                   expiresIn: { type: integer, example: 900 }
                   role: { type: string, example: admin }
         '401': { description: Invalid credentials }
@@ -47,7 +45,7 @@ paths:
     post:
       tags: [Auth]
       security: []
-      summary: Rotate a refresh token and issue a new access token
+      summary: Rotate the HttpOnly refresh cookie and issue a new HttpOnly access cookie
       responses:
         '200': { description: New access and refresh tokens }
         '401': { description: Refresh token is missing, expired, or revoked }

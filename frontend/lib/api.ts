@@ -4,18 +4,14 @@ export type ApiResult<T> = { data?: T; error?: string };
 let refreshInFlight: Promise<boolean> | null = null;
 
 async function refreshSession(): Promise<boolean> {
-  const refreshToken = localStorage.getItem("tz_refresh_token");
-  if (!refreshToken) return false;
   if (!refreshInFlight) {
     refreshInFlight = fetch(`${baseUrl}/api/v1/auth/refresh`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
+      credentials: "include",
     }).then(async (response) => {
       const body = await response.json().catch(() => ({}));
-      if (!response.ok || !body.accessToken) return false;
-      localStorage.setItem("tz_access_token", body.accessToken);
-      localStorage.setItem("tz_refresh_token", body.refreshToken);
+      if (!response.ok) return false;
       if (body.role) localStorage.setItem("tz_role", body.role);
       return true;
     }).finally(() => {
@@ -26,12 +22,12 @@ async function refreshSession(): Promise<boolean> {
 }
 
 export async function api<T>(path: string, options: RequestInit = {}, retry = true): Promise<ApiResult<T>> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("tz_access_token") : null;
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
       ...options,
-      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...options.headers },
+      credentials: "include",
+      headers: { "content-type": "application/json", ...options.headers },
     });
   } catch {
     return { error: "Cannot reach the API. Check that the backend is running and CORS allows this frontend." };
@@ -39,9 +35,8 @@ export async function api<T>(path: string, options: RequestInit = {}, retry = tr
   if (response.status === 401 && typeof window !== "undefined" && path !== "/api/v1/auth/login" && path !== "/api/v1/auth/refresh" && retry) {
     const renewed = await refreshSession();
     if (renewed) return api<T>(path, options, false);
-    localStorage.removeItem("tz_access_token");
-    localStorage.removeItem("tz_refresh_token");
     localStorage.removeItem("tz_role");
+    localStorage.removeItem("tz_name");
     window.location.assign("/login");
   }
   const body = await response.json().catch(() => ({}));

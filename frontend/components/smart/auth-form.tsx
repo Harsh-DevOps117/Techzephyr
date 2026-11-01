@@ -31,7 +31,7 @@ export function AuthForm() {
     event.preventDefault();
     setError("");
     setBusy(true);
-    const result = await api<{ accessToken: string; refreshToken: string; role: string }>("/api/v1/auth/login", {
+    const result = await api<{ role: string }>("/api/v1/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
@@ -40,8 +40,9 @@ export function AuthForm() {
       setError(result.error ?? "Unable to sign in");
       return;
     }
-    localStorage.setItem("tz_access_token", result.data.accessToken);
-    localStorage.setItem("tz_refresh_token", result.data.refreshToken);
+    // Remove tokens written by pre-cookie versions of the client. Tokens are now HttpOnly cookies.
+    localStorage.removeItem("tz_access_token");
+    localStorage.removeItem("tz_refresh_token");
     localStorage.setItem("tz_role", result.data.role);
     const me = await api<{ display_name: string; role: string }>("/api/v1/auth/me");
     if (me.data) {

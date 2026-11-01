@@ -45,19 +45,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (!publicPaths.has(path)) {
       setSavedRole(localStorage.getItem("tz_role") ?? "admin");
       setSavedName(localStorage.getItem("tz_name") ?? "CIT user");
-      if (!localStorage.getItem("tz_access_token")) router.replace("/login");
     }
   }, [path, router]);
   useEffect(() => {
-    if (publicPaths.has(path) || !localStorage.getItem("tz_access_token")) return;
+    if (publicPaths.has(path)) return;
     api<Profile>("/api/v1/auth/me").then((result) => {
       if (result.data) {
         setProfile(result.data);
         localStorage.setItem("tz_role", result.data.role);
         localStorage.setItem("tz_name", result.data.display_name);
+      } else {
+        router.replace("/login");
       }
     });
-  }, [path]);
+  }, [path, router]);
   if (publicPaths.has(path)) return <><SmoothScroll />{children}</>;
   const roleKey = profile?.role ?? savedRole;
   const role = (roleKey || "account").replaceAll("_", " ");
@@ -68,17 +69,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className={`app-layout${navOpen === false ? " nav-closed" : ""}${navOpen === true ? " nav-open" : ""}`}>
       <aside className={`sidebar ${navOpen === true ? "open" : ""}`}>
-        <div className="brand-row">
-          <Link className="brand" href="/dashboard" onClick={closeNavOnMobile}><span><b>TechZephyr</b><small>CIT scheduling</small></span></Link>
-        </div>
-        <p className="side-kicker">Campus</p>
         <nav aria-label="Primary navigation">{visible.map(({ href, label, icon: NavIcon }) => <Link className={path === href ? "active" : ""} href={href} key={href} onClick={closeNavOnMobile}><NavIcon /><span>{label}</span></Link>)}</nav>
         <div className="sidebar-foot">
           <Link href="/profile" onClick={closeNavOnMobile} className="who">
             <span className="avatar">{initials}</span>
             <div><strong>{name}</strong><small>{role}</small></div>
           </Link>
-          <button onClick={() => { const refreshToken = localStorage.getItem("tz_refresh_token"); if (refreshToken) void api("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) }); localStorage.clear(); router.push("/"); }} aria-label="Sign out"><LogoutIcon /></button>
+          <button onClick={() => { void api("/api/v1/auth/logout", { method: "POST" }); localStorage.clear(); router.push("/"); }} aria-label="Sign out"><LogoutIcon /></button>
         </div>
       </aside>
       <div className="app-content">
