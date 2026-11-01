@@ -155,14 +155,5 @@ export function NextGuide({ path, role }: { path: string; role: string }) {
     });
   }, [path]);
   const hint = retarget(pageHints[path] ?? fromState(dash, role), role);
-  return (
-    <div className="next-guide">
-      <span>Do this next</span>
-      <div>
-        <strong>{hint.title}</strong>
-        <p>{hint.copy}</p>
-      </div>
-      <Link href={hint.href}>{hint.label}</Link>
-    </div>
-  );
+  return <Link href={hint.href}>{hint.label}</Link>;
 }

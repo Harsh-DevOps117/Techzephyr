@@ -84,12 +84,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <div className="app-content">
-        <div className="mobile-bar">
-          <button type="button" className="nav-toggle" aria-expanded={navOpen === true} aria-label={navOpen === true ? "Hide navigation" : "Open navigation"} onClick={toggleNav}><PanelIcon /></button>
-          <span>CIT Campus</span>
-          <Link href="/profile">Profile</Link>
+        <div className="sticky-nav">
+          <button type="button" className="nav-toggle sticky-toggle" aria-expanded={navOpen !== false} aria-label={navOpen === false ? "Open navigation" : "Hide navigation"} onClick={toggleNav}><PanelIcon /></button>
+          <span className="sticky-name">TechZephyr</span>
+          <div className="next-guide"><NextGuide path={path} role={roleKey} /></div>
         </div>
-        <NextGuide path={path} role={roleKey} />
         <PageTransition>
           {allowed ? children : (
             <main className="route">
