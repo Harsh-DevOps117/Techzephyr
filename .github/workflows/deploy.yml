@@ -3,7 +3,7 @@ name: Deploy
 on:
   workflow_dispatch:
   push:
-    branches: [main, cursor/amazon-linux-deploy-2111, cursor/deploy-health-wait-2111, cursor/ai-graceful-2111]
+    branches: [main, cursor/amazon-linux-deploy-2111, cursor/deploy-health-wait-2111]
 
 jobs:
   deploy:
@@ -78,9 +78,9 @@ jobs:
             git clone https://github.com/Harsh-DevOps117/Techzephyr.git "$app"
           fi
           cd "$app"
-          git fetch origin cursor/ai-graceful-2111
-          git checkout cursor/ai-graceful-2111
-          git pull --ff-only origin cursor/ai-graceful-2111
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
           if [ ! -f .env ]; then
             cp .env.example .env
             python3 - "$PUBLIC_ORIGIN" <<'PY'
