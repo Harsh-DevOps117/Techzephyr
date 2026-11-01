@@ -3,6 +3,14 @@ export type ApiResult<T> = { data?: T; error?: string };
 
 let refreshInFlight: Promise<boolean> | null = null;
 
+export type SessionProfile = {
+  id?: string;
+  display_name: string;
+  email: string;
+  role: string;
+  department: string | null;
+};
+
 async function refreshSession(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = fetch(`${baseUrl}/api/v1/auth/refresh`, {
@@ -41,6 +49,42 @@ export async function api<T>(path: string, options: RequestInit = {}, retry = tr
   }
   const body = await response.json().catch(() => ({}));
   return response.ok ? { data: body as T } : { error: body.message ?? "Request failed" };
+}
+
+/** Read an optional browser session without redirecting signed-out visitors. */
+export async function getSession(): Promise<SessionProfile | null> {
+  async function request() {
+    return fetch(`${baseUrl}/api/v1/auth/me`, {
+      credentials: "include",
+      headers: { accept: "application/json" },
+    });
+  }
+
+  try {
+    let response = await request();
+    if (response.status === 401 && await refreshSession()) response = await request();
+    if (!response.ok) return null;
+    return await response.json() as SessionProfile;
+  } catch {
+    return null;
+  }
+}
+
+/** Revoke the refresh session and wait for both HttpOnly cookies to be cleared. */
+export async function signOut(): Promise<void> {
+  try {
+    await fetch(`${baseUrl}/api/v1/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+    });
+  } finally {
+    if (typeof window !== "undefined") {
+      for (const key of ["tz_access_token", "tz_refresh_token", "tz_role", "tz_name"]) {
+        localStorage.removeItem(key);
+      }
+    }
+  }
 }
 
 export function uuidv7(): string {

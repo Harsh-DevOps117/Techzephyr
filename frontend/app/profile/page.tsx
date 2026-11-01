@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "../../lib/api";
+import { api, signOut } from "../../lib/api";
 
 type Profile = {
   email: string;
@@ -68,7 +68,7 @@ export default function ProfilePage() {
             <strong>{(profile?.role ?? "campus").replaceAll("_", " ")}</strong>
             <p>{note.title}</p>
           </div>
-          <button className="ghost" onClick={() => { const refreshToken = localStorage.getItem("tz_refresh_token"); if (refreshToken) void api("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) }); localStorage.clear(); router.push("/"); }}>Sign out</button>
+          <button className="ghost" onClick={async () => { await signOut(); router.replace("/"); }}>Sign out</button>
         </article>
         <article className="note-card">
           <b>What you can do</b>

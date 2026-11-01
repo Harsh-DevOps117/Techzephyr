@@ -65,10 +65,14 @@ function readCookie(req: Request, name: string): string | undefined {
   }
 }
 
-function sessionCookieOptions(maxAge: number, path = "/") {
+function sessionCookieOptions(req: Request, maxAge: number, path = "/") {
   return {
     httpOnly: true,
-    secure: config.NODE_ENV === "production",
+    // `NODE_ENV=production` describes the build, not the browser's transport.
+    // Express resolves `req.secure` from the connection and the trusted
+    // X-Forwarded-Proto header, so local HTTP and TLS-terminated deployments
+    // both receive cookies the browser can actually store.
+    secure: req.secure,
     sameSite: "lax" as const,
     path,
     maxAge,
@@ -76,16 +80,18 @@ function sessionCookieOptions(maxAge: number, path = "/") {
 }
 
 function setSessionCookies(
+  req: Request,
   res: Response,
   tokens: { accessToken: string; refreshToken: string; expiresIn: number },
 ) {
-  res.cookie(accessCookieName, tokens.accessToken, sessionCookieOptions(tokens.expiresIn * 1000));
-  res.cookie(refreshCookieName, tokens.refreshToken, sessionCookieOptions(config.REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000));
+  res.cookie(accessCookieName, tokens.accessToken, sessionCookieOptions(req, tokens.expiresIn * 1000));
+  res.cookie(refreshCookieName, tokens.refreshToken, sessionCookieOptions(req, config.REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000));
 }
 
-function clearSessionCookies(res: Response) {
-  res.clearCookie(accessCookieName, { httpOnly: true, secure: config.NODE_ENV === "production", sameSite: "lax", path: "/" });
-  res.clearCookie(refreshCookieName, { httpOnly: true, secure: config.NODE_ENV === "production", sameSite: "lax", path: "/" });
+function clearSessionCookies(req: Request, res: Response) {
+  const options = { httpOnly: true, secure: req.secure, sameSite: "lax" as const, path: "/" };
+  res.clearCookie(accessCookieName, options);
+  res.clearCookie(refreshCookieName, options);
 }
 
 function asyncRoute(
@@ -282,7 +288,7 @@ export function createApp() {
       try {
         const input = loginSchema.parse(req.body);
         const tokens = await login(input.email, input.password);
-        setSessionCookies(res, tokens);
+        setSessionCookies(req, res, tokens);
         res.json({ expiresIn: tokens.expiresIn, role: tokens.role });
       } catch {
         throw new ApiError(
@@ -354,7 +360,7 @@ export function createApp() {
         throw new ApiError(401, "invalid_refresh", "Sign in again");
       try {
         const tokens = await refresh(refreshToken);
-        setSessionCookies(res, tokens);
+        setSessionCookies(req, res, tokens);
         res.json({ expiresIn: tokens.expiresIn, role: tokens.role });
       } catch {
         throw new ApiError(401, "invalid_refresh", "Sign in again");
@@ -367,7 +373,7 @@ export function createApp() {
     asyncRoute(async (req, res) => {
       const refreshToken = readCookie(req, refreshCookieName);
       if (refreshToken) await logout(refreshToken);
-      clearSessionCookies(res);
+      clearSessionCookies(req, res);
       res.json({ status: "signed_out" });
     }),
   );

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import { api, signOut } from "../../lib/api";
 import { ApprovalIcon, BriefcaseIcon, CalendarIcon, DatabaseIcon, EventIcon, GridIcon, LogoutIcon, PanelIcon, VenueIcon, WrenchIcon } from "../ui/icons";
 import { NextGuide } from "./next-guide";
 import { SmoothScroll } from "../motion/smooth-scroll";
@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="avatar">{initials}</span>
             <div><strong>{name}</strong><small>{role}</small></div>
           </Link>
-          <button onClick={() => { void api("/api/v1/auth/logout", { method: "POST" }); localStorage.clear(); router.push("/"); }} aria-label="Sign out"><LogoutIcon /></button>
+          <button onClick={async () => { await signOut(); router.replace("/"); }} aria-label="Sign out"><LogoutIcon /></button>
         </div>
       </aside>
       <div className="app-content">

@@ -4,3 +4,4 @@ dist/
 .env
 exports/*.tmp
 *.log
+*.tsbuildinfo

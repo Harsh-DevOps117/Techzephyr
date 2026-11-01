@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Reveal } from "../components/motion/reveal";
 import { CloseIcon, MenuIcon } from "../components/ui/icons";
+import { getSession } from "../lib/api";
 
 const rows: { text: string; kind?: "lab" | "exam" }[][] = [
   [{ text: "MA101" }, { text: "CS201" }, { text: "PH101" }, { text: "" }, { text: "HS101" }],
@@ -19,7 +20,11 @@ export default function Landing() {
   const [signedIn, setSignedIn] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
-    setSignedIn(Boolean(localStorage.getItem("tz_access_token")));
+    let active = true;
+    void getSession().then((session) => {
+      if (active) setSignedIn(Boolean(session));
+    });
+    return () => { active = false; };
   }, []);
   const enter = signedIn ? "/dashboard" : "/login";
 

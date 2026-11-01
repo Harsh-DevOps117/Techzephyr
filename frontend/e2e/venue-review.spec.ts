@@ -17,10 +17,6 @@ async function login(page: import("@playwright/test").Page, email: string) {
   await page.waitForURL("**/dashboard");
 }
 
-async function token(page: import("@playwright/test").Page) {
-  return page.evaluate(() => localStorage.getItem("tz_access_token"));
-}
-
 test("club category is kept and venues can accept or reject", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page, "club@cit.local");
@@ -31,8 +27,7 @@ test("club category is kept and venues can accept or reject", async ({ page }) =
   await expect(category).toHaveValue("institute_event");
   await page.screenshot({ path: `${out}/club-category.png` });
 
-  const access = await token(page);
-  const schedules = await page.request.get("http://127.0.0.1:3000/api/v1/schedules", { headers: { authorization: `Bearer ${access}` } });
+  const schedules = await page.request.get("/backend/api/v1/schedules");
   const approved = ((await schedules.json()) as { items: Array<{ id: string; status: string }> }).items.find((item) => item.status === "approved");
   expect(approved).toBeTruthy();
   const draft = {
@@ -45,8 +40,7 @@ test("club category is kept and venues can accept or reject", async ({ page }) =
     assumptions: [],
     follow_up: null,
   };
-  const good = await page.request.post("http://127.0.0.1:3000/api/v1/booking-requests", {
-    headers: { authorization: `Bearer ${access}`, "content-type": "application/json" },
+  const good = await page.request.post("/backend/api/v1/booking-requests", {
     data: { scheduleVersionId: approved!.id, title: goodTitle, requestedCategory: "institute_event", draft: { ...draft, needs: ["projector"] } },
   });
   expect(good.ok()).toBeTruthy();
@@ -54,8 +48,7 @@ test("club category is kept and venues can accept or reject", async ({ page }) =
   expect(goodBody.appliedCategory).toBe("institute_event");
   expect(["approved", "alternative_offered"]).toContain(goodBody.proposedDecision.status);
   const acceptedLabel = String(goodBody.proposedDecision.status).replaceAll("_", " ");
-  const blocked = await page.request.post("http://127.0.0.1:3000/api/v1/booking-requests", {
-    headers: { authorization: `Bearer ${access}`, "content-type": "application/json" },
+  const blocked = await page.request.post("/backend/api/v1/booking-requests", {
     data: { scheduleVersionId: approved!.id, title: blockedTitle, requestedCategory: "guest_lecture", draft: { ...draft, needs: ["mic"] } },
   });
   expect(blocked.ok()).toBeTruthy();

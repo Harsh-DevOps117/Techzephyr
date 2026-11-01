@@ -6,7 +6,7 @@ info:
 servers:
   - url: http://localhost:3000
 security:
-  - BearerAuth: []
+  - CookieAuth: []
 tags:
   - name: Auth
   - name: Datasets
@@ -310,11 +310,16 @@ paths:
       responses: { '200': { description: Demo data reset } }
 components:
   securitySchemes:
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: tz_access
+      description: Browser sessions use the HttpOnly access cookie set by `/api/v1/auth/login`.
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Call `/api/v1/auth/login`, copy `accessToken`, then click Authorize and paste it here.
+      description: Optional bearer-token authentication for trusted non-browser clients.
     UserId:
       type: apiKey
       in: header
